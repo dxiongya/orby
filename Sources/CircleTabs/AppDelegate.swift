@@ -1,6 +1,10 @@
 import Cocoa
 import SwiftUI
 
+extension Notification.Name {
+    static let escapePressed = Notification.Name("CircleTabsEscapePressed")
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var overlayPanel: OverlayPanel?
@@ -8,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isOverlayVisible = false
     private var escapeMonitor: Any?
     private var permissionWindow: NSWindow?
+    private var settingsWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusBar()
@@ -16,8 +21,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if HotKeyManager.hasAccessibilityPermission {
             startApp()
         } else {
-            // Reset stale TCC entry (code signature changed after rebuild),
-            // then re-prompt so the app appears in the Accessibility list.
             resetAccessibilityTCC()
             showPermissionGuide()
         }
@@ -32,7 +35,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Permission Guide
 
     private func showPermissionGuide() {
-        // Prompt the system dialog
         HotKeyManager.requestAccessibilityPermission()
 
         let guideView = PermissionGuideView {
@@ -62,7 +64,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         permissionWindow = nil
     }
 
-    /// Clear stale TCC entry for this app so macOS re-prompts with the new code signature.
     private func resetAccessibilityTCC() {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
@@ -85,6 +86,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         show.target = self
         menu.addItem(show)
         menu.addItem(NSMenuItem.separator())
+        let settingsItem = NSMenuItem(title: "设置...", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+        menu.addItem(NSMenuItem.separator())
         let perm = NSMenuItem(title: "Open Accessibility Settings...", action: #selector(openAccessibility), keyEquivalent: "")
         perm.target = self
         menu.addItem(perm)
@@ -93,6 +98,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quit.target = self
         menu.addItem(quit)
         statusItem.menu = menu
+    }
+
+    // MARK: - Settings
+
+    @objc private func openSettings() {
+        if let existing = settingsWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let settingsView = SettingsView(
+            onStartRecording: { [weak self] in
+                self?.hotKeyManager.isPaused = true
+            },
+            onStopRecording: { [weak self] in
+                self?.hotKeyManager.isPaused = false
+            }
+        )
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 340),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "CircleTabs 设置"
+        window.contentView = NSHostingView(rootView: settingsView)
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        settingsWindow = window
     }
 
     // MARK: - Hot Key
@@ -106,7 +145,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupEscapeMonitor() {
         escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if event.keyCode == 53 { self?.hideOverlay(); return nil }
+            if event.keyCode == 53 {
+                guard self?.isOverlayVisible == true else { return event }
+                // Post notification — CircleTabsView decides whether to exit close mode or dismiss
+                NotificationCenter.default.post(name: .escapePressed, object: nil)
+                return nil
+            }
             return event
         }
     }

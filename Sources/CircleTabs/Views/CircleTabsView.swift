@@ -1,10 +1,16 @@
 import SwiftUI
 
-private let jellySpring = Animation.spring(response: 0.22, dampingFraction: 0.72)
+private let jellySpring = Animation.spring(response: 0.32, dampingFraction: 0.68)
 private let subAppSpring = Animation.spring(response: 0.35, dampingFraction: 0.5)
 private let softSpring = Animation.spring(response: 0.2, dampingFraction: 0.75)
 private let quickSpring = Animation.spring(response: 0.18, dampingFraction: 0.7)
 private let collapseAnim = Animation.easeOut(duration: 0.12)
+
+enum CloseMode: Equatable {
+    case none
+    case mainApps
+    case subApps
+}
 
 struct CircleTabsView: View {
     @Binding var isVisible: Bool
@@ -28,6 +34,13 @@ struct CircleTabsView: View {
     @State private var switchWorkItem: DispatchWorkItem?
     @State private var safeBounds: CGRect = .zero
 
+    // Close mode state
+    @State private var closeMode: CloseMode = .none
+    @State private var longPressWorkItem: DispatchWorkItem?
+    @State private var longPressStartPos: CGPoint?
+    @State private var longPressTriggered = false
+    @State private var isDragging = false
+
     var body: some View {
         GeometryReader { geo in
             ZStack {
@@ -39,6 +52,7 @@ struct CircleTabsView: View {
                     mainAppBubbles()
                     subAppBubbles()
                     windowPreview()
+                    closeModeHint()
                     closeButton()
                 }
             }
@@ -53,10 +67,162 @@ struct CircleTabsView: View {
         }
         .gesture(
             DragGesture(minimumDistance: 0)
-                .onChanged { handleMouseMove($0.location) }
-                .onEnded { handleClick(at: $0.location) }
+                .onChanged { value in
+                    handleMouseMove(value.location)
+                    if !isDragging {
+                        isDragging = true
+                        longPressStartPos = value.location
+                        if closeMode == .none {
+                            startLongPressDetection(at: value.location)
+                        }
+                    } else if let start = longPressStartPos {
+                        let dx = value.location.x - start.x
+                        let dy = value.location.y - start.y
+                        if sqrt(dx * dx + dy * dy) > 8 {
+                            cancelLongPress()
+                        }
+                    }
+                }
+                .onEnded { value in
+                    isDragging = false
+                    cancelLongPress()
+
+                    if longPressTriggered {
+                        longPressTriggered = false
+                        return
+                    }
+
+                    if closeMode != .none {
+                        handleCloseModeTap(at: value.location)
+                    } else {
+                        handleClick(at: value.location)
+                    }
+                }
         )
-        .onExitCommand { dismiss() }
+        .onReceive(NotificationCenter.default.publisher(for: .escapePressed)) { _ in
+            if closeMode != .none {
+                withAnimation(quickSpring) { closeMode = .none }
+            } else {
+                dismiss()
+            }
+        }
+    }
+
+    // MARK: - Long Press Detection
+
+    private func startLongPressDetection(at location: CGPoint) {
+        longPressWorkItem?.cancel()
+
+        let work = DispatchWorkItem { [self] in
+            // Check sub-apps first (higher z-order)
+            if let idx = expandedAppIndex, idx < apps.count,
+               let _ = CircularLayoutEngine.findClosestSubApp(
+                   to: location, in: apps[idx].windows,
+                   threshold: CircularLayoutEngine.subBubbleRadius + 18
+               ) {
+                enterCloseMode(.subApps)
+                return
+            }
+
+            // Then check main apps
+            let effectiveR = CircularLayoutEngine.effectiveBubbleRadius(for: apps.count)
+            if let _ = CircularLayoutEngine.findClosestApp(
+                to: location, in: apps, offsets: pushOffsets, threshold: effectiveR + 20
+            ) {
+                enterCloseMode(.mainApps)
+            }
+        }
+        longPressWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+    }
+
+    private func cancelLongPress() {
+        longPressWorkItem?.cancel()
+        longPressWorkItem = nil
+        longPressStartPos = nil
+    }
+
+    private func enterCloseMode(_ mode: CloseMode) {
+        longPressTriggered = true
+        withAnimation(quickSpring) {
+            closeMode = mode
+            if mode == .mainApps {
+                // Collapse sub-apps — close mode is for main apps only
+                expandedAppIndex = nil
+                hoveredSubAppIndex = nil
+                recalcPushOffsets()
+                subAppStaggerFlags = []
+                clearPreviewNow()
+            }
+        }
+    }
+
+    // MARK: - Close Mode Tap
+
+    private func handleCloseModeTap(at loc: CGPoint) {
+        if closeMode == .mainApps {
+            let effectiveR = CircularLayoutEngine.effectiveBubbleRadius(for: apps.count)
+            if let idx = CircularLayoutEngine.findClosestApp(
+                to: loc, in: apps, offsets: pushOffsets, threshold: effectiveR + 12
+            ) {
+                AppDiscoveryService.shared.terminateApp(apps[idx])
+                withAnimation(softSpring) {
+                    apps.remove(at: idx)
+                    if idx < staggerFlags.count { staggerFlags.remove(at: idx) }
+                    pushOffsets = Array(repeating: .zero, count: apps.count)
+                    hoveredAppIndex = nil
+                    CircularLayoutEngine.layoutApps(&apps, center: center, safeBounds: safeBounds)
+                }
+                if apps.isEmpty {
+                    closeMode = .none
+                    dismiss()
+                }
+            }
+        } else if closeMode == .subApps {
+            if let idx = expandedAppIndex, idx < apps.count,
+               let sub = CircularLayoutEngine.findClosestSubApp(
+                   to: loc, in: apps[idx].windows,
+                   threshold: CircularLayoutEngine.subBubbleRadius + 12
+               ) {
+                let window = apps[idx].windows[sub]
+                AppDiscoveryService.shared.closeWindow(window)
+                withAnimation(softSpring) {
+                    apps[idx].windows.remove(at: sub)
+                    hoveredSubAppIndex = nil
+                    if apps[idx].windows.isEmpty {
+                        closeMode = .none
+                        expandedAppIndex = nil
+                        recalcPushOffsets()
+                        subAppStaggerFlags = []
+                    } else {
+                        layoutSubApps(for: idx)
+                        subAppStaggerFlags = []
+                        animateSubAppEntrance(count: apps[idx].windows.count)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Close Mode Hint
+
+    private func closeModeHint() -> some View {
+        Group {
+            if closeMode != .none {
+                Text(closeMode == .mainApps ? "点击关闭应用 · ESC 退出" : "点击关闭窗口 · ESC 退出")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.9))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule()
+                            .fill(Color.red.opacity(0.55))
+                            .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+                    )
+                    .position(x: center.x, y: center.y + 32)
+                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+            }
+        }
     }
 
     // MARK: - Compute Center from mouse
@@ -72,11 +238,10 @@ struct CircleTabsView: View {
         let vf = screen.visibleFrame
         let w = geoSize.width > 0 ? geoSize.width : sf.width
         let h = geoSize.height > 0 ? geoSize.height : sf.height
-        // Safe bounds excluding dock & menu bar, in flipped (SwiftUI) coordinates
-        let topInset = sf.maxY - vf.maxY       // menu bar
-        let bottomInset = vf.minY - sf.minY     // dock (bottom)
-        let leftInset = vf.minX - sf.minX       // dock (left side)
-        let rightInset = sf.maxX - vf.maxX      // dock (right side)
+        let topInset = sf.maxY - vf.maxY
+        let bottomInset = vf.minY - sf.minY
+        let leftInset = vf.minX - sf.minX
+        let rightInset = sf.maxX - vf.maxX
         safeBounds = CGRect(
             x: leftInset,
             y: topInset,
@@ -86,7 +251,6 @@ struct CircleTabsView: View {
 
         let cursorPos = CGPoint(x: rawX, y: rawY)
         mousePos = cursorPos
-        // center is set ONLY inside loadApps (to the adjusted ring center)
         loadApps(around: cursorPos)
         withAnimation(jellySpring) { appeared = true }
         animateStaggeredEntrance()
@@ -117,8 +281,9 @@ struct CircleTabsView: View {
                 .foregroundColor(.black.opacity(0.5))
         }
         .position(x: center.x, y: center.y)
-        .scaleEffect(appeared ? 1.0 : 0.8)
-        .animation(jellySpring, value: appeared)
+        .scaleEffect(appeared ? 1.0 : 0.01)
+        .opacity(appeared ? 1.0 : 0)
+        .animation(.spring(response: 0.18, dampingFraction: 0.6), value: appeared)
         .onTapGesture { dismiss() }
     }
 
@@ -126,7 +291,7 @@ struct CircleTabsView: View {
 
     private func connectionLines() -> some View {
         Group {
-            if let i = hoveredAppIndex, i < apps.count {
+            if closeMode == .none, let i = hoveredAppIndex, i < apps.count {
                 let off = offset(for: i)
                 ConnectionLineView(
                     from: center,
@@ -139,7 +304,8 @@ struct CircleTabsView: View {
 
     private func subAppConnectionLines() -> some View {
         Group {
-            if let idx = expandedAppIndex, idx < apps.count,
+            if closeMode == .none,
+               let idx = expandedAppIndex, idx < apps.count,
                let wIdx = hoveredSubAppIndex, wIdx < apps[idx].windows.count {
                 let off = offset(for: idx)
                 let pp = CGPoint(x: apps[idx].position.x + off.x, y: apps[idx].position.y + off.y)
@@ -156,16 +322,22 @@ struct CircleTabsView: View {
     private func mainAppBubbles() -> some View {
         ForEach(apps.indices, id: \.self) { i in
             let vis = staggerFlags.indices.contains(i) ? staggerFlags[i] : false
+            // Entrance: fly outward from center
+            let flyX = vis ? 0.0 : center.x - apps[i].position.x
+            let flyY = vis ? 0.0 : center.y - apps[i].position.y
             AppBubbleView(
                 app: apps[i],
                 isHovered: hoveredAppIndex == i,
                 isExpanded: expandedAppIndex == i,
                 dimLevel: dimLevel(for: i),
-                offset: offset(for: i)
+                offset: offset(for: i),
+                isInCloseMode: closeMode == .mainApps
             )
-            .scaleEffect(vis ? 1.0 : 0.01)
+            .zIndex(hoveredAppIndex == i ? 100 : 0)
+            .offset(x: flyX, y: flyY)
+            .scaleEffect(vis ? 1.0 : 0.35)
             .opacity(vis ? 1.0 : 0)
-            .animation(jellySpring.delay(Double(i) * 0.008), value: vis)
+            .animation(jellySpring.delay(Double(i) * 0.015), value: vis)
             .onTapGesture { tapApp(i) }
         }
     }
@@ -181,7 +353,8 @@ struct CircleTabsView: View {
                         window: apps[idx].windows[wIdx],
                         parentIcon: apps[idx].icon,
                         isHovered: hoveredSubAppIndex == wIdx,
-                        showLabel: hoveredSubAppIndex == wIdx
+                        showLabel: hoveredSubAppIndex == wIdx,
+                        isInCloseMode: closeMode == .subApps
                     )
                     .zIndex(hoveredSubAppIndex == wIdx ? 100 : 0)
                     .scaleEffect(vis ? 1.0 : 0.01)
@@ -189,6 +362,7 @@ struct CircleTabsView: View {
                     .animation(subAppSpring.delay(Double(wIdx) * 0.04), value: vis)
                     .transition(.scale(scale: 0.4).combined(with: .opacity))
                     .onTapGesture {
+                        guard closeMode == .none else { return }
                         AppDiscoveryService.shared.activateWindow(apps[idx].windows[wIdx])
                         dismiss()
                     }
@@ -201,15 +375,13 @@ struct CircleTabsView: View {
 
     private func windowPreview() -> some View {
         Group {
-            if let img = previewImage {
+            if closeMode == .none, let img = previewImage {
                 let imgW = img.size.width
                 let imgH = img.size.height
                 let cardW = max(imgW, 160)
 
                 VStack(spacing: 0) {
-                    // Title bar with close button
                     HStack(spacing: 6) {
-                        // Close button (red circle)
                         Button(action: closePreviewWindow) {
                             ZStack {
                                 Circle()
@@ -234,7 +406,6 @@ struct CircleTabsView: View {
                     .padding(.top, 8)
                     .padding(.bottom, 6)
 
-                    // Preview image
                     Image(nsImage: img)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
@@ -265,7 +436,6 @@ struct CircleTabsView: View {
                     }
                 }
                 .onTapGesture {
-                    // Click preview → activate that window
                     if let idx = expandedAppIndex, idx < apps.count,
                        let wIdx = hoveredSubAppIndex, wIdx < apps[idx].windows.count {
                         AppDiscoveryService.shared.activateWindow(apps[idx].windows[wIdx])
@@ -281,7 +451,7 @@ struct CircleTabsView: View {
 
     private func loadApps(around pt: CGPoint) {
         var items = AppDiscoveryService.shared.getRunningApps()
-        center = pt  // close icon stays at cursor position
+        center = pt
         CircularLayoutEngine.layoutApps(&items, center: pt, safeBounds: safeBounds)
         apps = items
         pushOffsets = Array(repeating: .zero, count: items.count)
@@ -312,7 +482,35 @@ struct CircleTabsView: View {
     private func handleMouseMove(_ loc: CGPoint) {
         mousePos = loc
 
-        // STEP 1: When sub-apps are expanded, check sub-apps FIRST (they render on top)
+        // In close mode, simplified hover tracking
+        if closeMode == .mainApps {
+            let effectiveR = CircularLayoutEngine.effectiveBubbleRadius(for: apps.count)
+            let appIdx = CircularLayoutEngine.findClosestApp(
+                to: loc, in: apps, offsets: pushOffsets, threshold: effectiveR + 20
+            )
+            if hoveredAppIndex != appIdx {
+                withAnimation(quickSpring) { hoveredAppIndex = appIdx }
+            }
+            return
+        }
+
+        if closeMode == .subApps {
+            if let idx = expandedAppIndex, idx < apps.count {
+                if let sub = CircularLayoutEngine.findClosestSubApp(
+                    to: loc, in: apps[idx].windows,
+                    threshold: CircularLayoutEngine.subBubbleRadius + 18
+                ) {
+                    withAnimation(quickSpring) { hoveredSubAppIndex = sub }
+                    return
+                }
+            }
+            withAnimation(quickSpring) { hoveredSubAppIndex = nil }
+            return
+        }
+
+        // Normal mode — existing logic
+
+        // STEP 1: sub-apps first
         if let idx = expandedAppIndex, idx < apps.count {
             if let sub = CircularLayoutEngine.findClosestSubApp(to: loc, in: apps[idx].windows, threshold: CircularLayoutEngine.subBubbleRadius + 18) {
                 let winId = apps[idx].windows[sub].id
@@ -321,17 +519,17 @@ struct CircleTabsView: View {
                     clearPreviewNow()
                     schedulePreview(for: idx, windowIndex: sub, windowId: winId)
                 }
-                return // sub-app takes priority — skip main app checks
+                return
             }
         }
 
-        // STEP 2: Check main apps — use visual positions (base + push offsets)
+        // STEP 2: main apps
         let effectiveR = CircularLayoutEngine.effectiveBubbleRadius(for: apps.count)
         let appIdx = CircularLayoutEngine.findClosestApp(to: loc, in: apps, offsets: pushOffsets, threshold: effectiveR + 20)
 
         if hoveredAppIndex != appIdx { withAnimation(quickSpring) { hoveredAppIndex = appIdx } }
 
-        // STEP 3: If hovering a DIFFERENT main app than the expanded one → switch/collapse
+        // STEP 3: switch/collapse
         if let idx = appIdx, let expanded = expandedAppIndex, idx != expanded {
             if apps[idx].windows.count > 1 {
                 switchExpandedApp(to: idx)
@@ -341,20 +539,20 @@ struct CircleTabsView: View {
             return
         }
 
-        // STEP 4: If no app is expanded but hovering a multi-window app → expand
+        // STEP 4: expand
         if let idx = appIdx, expandedAppIndex == nil, apps[idx].windows.count > 1 {
             switchExpandedApp(to: idx)
             return
         }
 
-        // STEP 5: Cursor not near any sub-app — clear sub-app hover
+        // STEP 5: clear sub hover
         if expandedAppIndex != nil {
             if isHoveringPreview { return }
             withAnimation(quickSpring) { hoveredSubAppIndex = nil }
             clearPreviewNow()
         }
 
-        // STEP 6: Not near any main app or sub-app → collapse if near center
+        // STEP 6: collapse near center
         if expandedAppIndex != nil, appIdx == nil {
             let inSub: Bool
             if let idx = expandedAppIndex, idx < apps.count {
@@ -369,7 +567,6 @@ struct CircleTabsView: View {
         }
     }
 
-    /// Collapse current sub-apps and restore brightness
     private func collapseSubApps() {
         switchWorkItem?.cancel()
         switchWorkItem = nil
@@ -382,15 +579,11 @@ struct CircleTabsView: View {
         subAppStaggerFlags = []
     }
 
-    /// Smoothly switch from one expanded app to another:
-    /// collapse old sub-apps first, then expand new from parent position.
     private func switchExpandedApp(to newIdx: Int) {
-        // Cancel any pending switch
         switchWorkItem?.cancel()
         clearPreviewNow()
 
         if expandedAppIndex != nil {
-            // Phase 1: collapse old sub-apps + restore brightness
             withAnimation(collapseAnim) {
                 expandedAppIndex = nil
                 hoveredSubAppIndex = nil
@@ -398,7 +591,6 @@ struct CircleTabsView: View {
             }
             subAppStaggerFlags = []
 
-            // Phase 2: after collapse, expand new sub-apps from parent
             let work = DispatchWorkItem { [self] in
                 guard newIdx < apps.count else { return }
                 withAnimation(softSpring) {
@@ -412,7 +604,6 @@ struct CircleTabsView: View {
             switchWorkItem = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
         } else {
-            // No app currently expanded, expand directly
             withAnimation(softSpring) {
                 expandedAppIndex = newIdx
                 hoveredSubAppIndex = nil
@@ -436,7 +627,6 @@ struct CircleTabsView: View {
                     previewImage = img
                     previewTitle = win.name.isEmpty ? "Window" : win.name
 
-                    // Position preview outward from center, past the sub-app bubble
                     let dx = win.position.x - center.x
                     let dy = win.position.y - center.y
                     let dist = sqrt(dx * dx + dy * dy)
@@ -469,7 +659,6 @@ struct CircleTabsView: View {
         let window = apps[idx].windows[wIdx]
         AppDiscoveryService.shared.closeWindow(window)
         clearPreviewNow()
-        // Reload after window closes
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             subAppStaggerFlags = []
             withAnimation(softSpring) {
@@ -494,6 +683,7 @@ struct CircleTabsView: View {
     }
 
     private func tapApp(_ i: Int) {
+        guard closeMode == .none else { return }
         if apps[i].windows.count <= 1 {
             AppDiscoveryService.shared.activateApp(apps[i]); dismiss()
         } else if expandedAppIndex == i {
@@ -528,7 +718,9 @@ struct CircleTabsView: View {
     private func dismiss() {
         switchWorkItem?.cancel()
         switchWorkItem = nil
+        cancelLongPress()
         clearPreviewNow()
+        closeMode = .none
         withAnimation(.easeOut(duration: 0.18)) { appeared = false }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { isVisible = false }
     }

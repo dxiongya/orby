@@ -215,7 +215,13 @@ final class AppDiscoveryService {
         return image
     }
 
-    // MARK: - Activate
+    // MARK: - Activate & Terminate
+
+    func terminateApp(_ app: AppItem) {
+        if let runningApp = NSRunningApplication(processIdentifier: app.pid) {
+            runningApp.terminate()
+        }
+    }
 
     func activateApp(_ app: AppItem) {
         if let runningApp = NSRunningApplication(processIdentifier: app.pid) {

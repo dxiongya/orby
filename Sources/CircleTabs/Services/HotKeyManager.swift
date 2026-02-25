@@ -6,6 +6,9 @@ final class HotKeyManager {
     private var runLoopSource: CFRunLoopSource?
     var onToggle: (() -> Void)?
 
+    /// Set true to pass all events through (during hotkey recording)
+    var isPaused = false
+
     static func requestAccessibilityPermission() {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
         AXIsProcessTrustedWithOptions(options)
@@ -38,7 +41,6 @@ final class HotKeyManager {
     }
 
     private func setupEventTap() {
-        // Monitor both keyDown and flagsChanged
         let callback: CGEventTapCallBack = { proxy, type, event, refcon in
             guard let refcon = refcon else { return Unmanaged.passRetained(event) }
             let manager = Unmanaged<HotKeyManager>.fromOpaque(refcon).takeUnretainedValue()
@@ -51,34 +53,38 @@ final class HotKeyManager {
                 return Unmanaged.passRetained(event)
             }
 
-            guard type == .keyDown else {
+            if manager.isPaused {
                 return Unmanaged.passRetained(event)
             }
 
-            let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
             let flags = event.flags
 
-            // Option + Tab (keyCode 48 = Tab, maskAlternate = Option)
-            let hasOption = flags.contains(.maskAlternate)
-            let isTab = keyCode == 48
-
-            if isTab {
-                HotKeyManager.dbg("Tab pressed, hasOption=\(hasOption) flags=\(flags.rawValue)")
+            // Keyboard hotkey
+            if type == .keyDown {
+                let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+                if SettingsManager.shared.matchesKeyHotKey(keyCode: keyCode, flags: flags) {
+                    HotKeyManager.dbg("Key hotkey matched! keyCode=\(keyCode)")
+                    DispatchQueue.main.async { manager.onToggle?() }
+                    return nil
+                }
             }
 
-            if hasOption && isTab {
-                HotKeyManager.dbg("Option+Tab detected! Firing toggle.")
-                DispatchQueue.main.async {
-                    manager.onToggle?()
+            // Mouse hotkey (right click)
+            if type == .rightMouseDown {
+                if SettingsManager.shared.matchesMouseHotKey(button: 2, flags: flags) {
+                    HotKeyManager.dbg("Mouse hotkey matched! rightClick flags=\(flags.rawValue)")
+                    DispatchQueue.main.async { manager.onToggle?() }
+                    return nil
                 }
-                return nil // consume the event
             }
 
             return Unmanaged.passRetained(event)
         }
 
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        let eventMask: CGEventMask = 1 << CGEventType.keyDown.rawValue
+        let eventMask: CGEventMask =
+            (1 << CGEventType.keyDown.rawValue) |
+            (1 << CGEventType.rightMouseDown.rawValue)
 
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
@@ -97,7 +103,7 @@ final class HotKeyManager {
         if let source = runLoopSource {
             CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
             CGEvent.tapEnable(tap: tap, enable: true)
-            Self.dbg("CGEventTap active! Option+Tab ready.")
+            Self.dbg("CGEventTap active! Hotkeys ready (keyboard + mouse).")
         }
     }
 
