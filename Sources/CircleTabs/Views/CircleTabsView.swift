@@ -26,6 +26,7 @@ struct CircleTabsView: View {
     @State private var isHoveringPreview = false
     @State private var previewTitle: String = ""
     @State private var switchWorkItem: DispatchWorkItem?
+    @State private var safeBounds: CGRect = .zero
 
     var body: some View {
         GeometryReader { geo in
@@ -68,16 +69,25 @@ struct CircleTabsView: View {
         let rawX = mouse.x - sf.origin.x
         let rawY = sf.height - (mouse.y - sf.origin.y)
 
-        let margin: CGFloat = 230 // generous margin for adaptive ring
+        let vf = screen.visibleFrame
         let w = geoSize.width > 0 ? geoSize.width : sf.width
         let h = geoSize.height > 0 ? geoSize.height : sf.height
-        let cx = max(margin, min(rawX, w - margin))
-        let cy = max(margin, min(rawY, h - margin))
-        let newCenter = CGPoint(x: cx, y: cy)
+        // Safe bounds excluding dock & menu bar, in flipped (SwiftUI) coordinates
+        let topInset = sf.maxY - vf.maxY       // menu bar
+        let bottomInset = vf.minY - sf.minY     // dock (bottom)
+        let leftInset = vf.minX - sf.minX       // dock (left side)
+        let rightInset = sf.maxX - vf.maxX      // dock (right side)
+        safeBounds = CGRect(
+            x: leftInset,
+            y: topInset,
+            width: w - leftInset - rightInset,
+            height: h - topInset - bottomInset
+        )
 
-        center = newCenter
-        mousePos = newCenter
-        loadApps(around: newCenter)
+        let cursorPos = CGPoint(x: rawX, y: rawY)
+        mousePos = cursorPos
+        // center is set ONLY inside loadApps (to the adjusted ring center)
+        loadApps(around: cursorPos)
         withAnimation(jellySpring) { appeared = true }
         animateStaggeredEntrance()
     }
@@ -146,8 +156,6 @@ struct CircleTabsView: View {
     private func mainAppBubbles() -> some View {
         ForEach(apps.indices, id: \.self) { i in
             let vis = staggerFlags.indices.contains(i) ? staggerFlags[i] : false
-            let dx = apps[i].position.x - center.x
-            let dy = apps[i].position.y - center.y
             AppBubbleView(
                 app: apps[i],
                 isHovered: hoveredAppIndex == i,
@@ -155,8 +163,7 @@ struct CircleTabsView: View {
                 dimLevel: dimLevel(for: i),
                 offset: offset(for: i)
             )
-            .offset(x: vis ? 0 : -dx, y: vis ? 0 : -dy)
-            .scaleEffect(vis ? 1.0 : 0.7)
+            .scaleEffect(vis ? 1.0 : 0.01)
             .opacity(vis ? 1.0 : 0)
             .animation(jellySpring.delay(Double(i) * 0.008), value: vis)
             .onTapGesture { tapApp(i) }
@@ -168,13 +175,8 @@ struct CircleTabsView: View {
     private func subAppBubbles() -> some View {
         Group {
             if let idx = expandedAppIndex, idx < apps.count {
-                let parentOff = offset(for: idx)
-                let parentX = apps[idx].position.x + parentOff.x
-                let parentY = apps[idx].position.y + parentOff.y
                 ForEach(apps[idx].windows.indices, id: \.self) { wIdx in
                     let vis = subAppStaggerFlags.indices.contains(wIdx) ? subAppStaggerFlags[wIdx] : false
-                    let dx = apps[idx].windows[wIdx].position.x - parentX
-                    let dy = apps[idx].windows[wIdx].position.y - parentY
                     SubAppBubbleView(
                         window: apps[idx].windows[wIdx],
                         parentIcon: apps[idx].icon,
@@ -182,8 +184,7 @@ struct CircleTabsView: View {
                         showLabel: hoveredSubAppIndex == wIdx
                     )
                     .zIndex(hoveredSubAppIndex == wIdx ? 100 : 0)
-                    .offset(x: vis ? 0 : -dx, y: vis ? 0 : -dy)
-                    .scaleEffect(vis ? 1.0 : 0.4)
+                    .scaleEffect(vis ? 1.0 : 0.01)
                     .opacity(vis ? 1.0 : 0)
                     .animation(subAppSpring.delay(Double(wIdx) * 0.04), value: vis)
                     .transition(.scale(scale: 0.4).combined(with: .opacity))
@@ -280,7 +281,8 @@ struct CircleTabsView: View {
 
     private func loadApps(around pt: CGPoint) {
         var items = AppDiscoveryService.shared.getRunningApps()
-        CircularLayoutEngine.layoutApps(&items, center: pt)
+        center = pt  // close icon stays at cursor position
+        CircularLayoutEngine.layoutApps(&items, center: pt, safeBounds: safeBounds)
         apps = items
         pushOffsets = Array(repeating: .zero, count: items.count)
         staggerFlags = Array(repeating: false, count: items.count)
@@ -310,13 +312,26 @@ struct CircleTabsView: View {
     private func handleMouseMove(_ loc: CGPoint) {
         mousePos = loc
 
-        // STEP 1: Always check main apps FIRST — use visual positions (base + push offsets)
+        // STEP 1: When sub-apps are expanded, check sub-apps FIRST (they render on top)
+        if let idx = expandedAppIndex, idx < apps.count {
+            if let sub = CircularLayoutEngine.findClosestSubApp(to: loc, in: apps[idx].windows, threshold: CircularLayoutEngine.subBubbleRadius + 18) {
+                let winId = apps[idx].windows[sub].id
+                withAnimation(quickSpring) { hoveredSubAppIndex = sub; hoveredAppIndex = idx }
+                if winId != previewForWindowId {
+                    clearPreviewNow()
+                    schedulePreview(for: idx, windowIndex: sub, windowId: winId)
+                }
+                return // sub-app takes priority — skip main app checks
+            }
+        }
+
+        // STEP 2: Check main apps — use visual positions (base + push offsets)
         let effectiveR = CircularLayoutEngine.effectiveBubbleRadius(for: apps.count)
         let appIdx = CircularLayoutEngine.findClosestApp(to: loc, in: apps, offsets: pushOffsets, threshold: effectiveR + 20)
 
         if hoveredAppIndex != appIdx { withAnimation(quickSpring) { hoveredAppIndex = appIdx } }
 
-        // STEP 2: If hovering a DIFFERENT main app than the expanded one → switch/collapse
+        // STEP 3: If hovering a DIFFERENT main app than the expanded one → switch/collapse
         if let idx = appIdx, let expanded = expandedAppIndex, idx != expanded {
             if apps[idx].windows.count > 1 {
                 switchExpandedApp(to: idx)
@@ -326,30 +341,20 @@ struct CircleTabsView: View {
             return
         }
 
-        // STEP 3: If no app is expanded but hovering a multi-window app → expand
+        // STEP 4: If no app is expanded but hovering a multi-window app → expand
         if let idx = appIdx, expandedAppIndex == nil, apps[idx].windows.count > 1 {
             switchExpandedApp(to: idx)
             return
         }
 
-        // STEP 4: Check sub-apps of the currently expanded app
-        if let idx = expandedAppIndex, idx < apps.count {
-            if let sub = CircularLayoutEngine.findClosestSubApp(to: loc, in: apps[idx].windows, threshold: CircularLayoutEngine.subBubbleRadius + 18) {
-                let winId = apps[idx].windows[sub].id
-                withAnimation(quickSpring) { hoveredSubAppIndex = sub; hoveredAppIndex = idx }
-                if winId != previewForWindowId {
-                    clearPreviewNow()
-                    schedulePreview(for: idx, windowIndex: sub, windowId: winId)
-                }
-                return
-            }
-            // Not near any sub-app — keep preview if hovering it
+        // STEP 5: Cursor not near any sub-app — clear sub-app hover
+        if expandedAppIndex != nil {
             if isHoveringPreview { return }
             withAnimation(quickSpring) { hoveredSubAppIndex = nil }
             clearPreviewNow()
         }
 
-        // STEP 5: Not near any main app or sub-app → collapse if near center
+        // STEP 6: Not near any main app or sub-app → collapse if near center
         if expandedAppIndex != nil, appIdx == nil {
             let inSub: Bool
             if let idx = expandedAppIndex, idx < apps.count {
@@ -357,7 +362,7 @@ struct CircleTabsView: View {
             } else { inSub = false }
             if !inSub && !isHoveringPreview {
                 let dx = loc.x - center.x, dy = loc.y - center.y
-                if sqrt(dx*dx + dy*dy) < CircularLayoutEngine.ringRadius(for: apps.count) * 0.3 {
+                if sqrt(dx*dx + dy*dy) < CircularLayoutEngine.ring1Radius * 0.3 {
                     collapseSubApps()
                 }
             }
@@ -508,13 +513,15 @@ struct CircleTabsView: View {
     private func layoutSubApps(for i: Int) {
         guard i < apps.count else { return }
         var w = apps[i].windows
-        CircularLayoutEngine.layoutSubApps(&w, parentPosition: apps[i].position, parentAngle: apps[i].angle, center: center)
+        CircularLayoutEngine.layoutSubApps(&w, parentPosition: apps[i].position, parentAngle: apps[i].angle, center: center, safeBounds: safeBounds)
         apps[i].windows = w
     }
 
     private func recalcPushOffsets() {
         if let idx = expandedAppIndex {
-            pushOffsets = CircularLayoutEngine.calculatePushOffsets(apps: apps, expandedIndex: idx, center: center)
+            var offsets = CircularLayoutEngine.calculatePushOffsets(apps: apps, expandedIndex: idx, center: center)
+            CircularLayoutEngine.clampPushOffsets(&offsets, apps: apps, safeBounds: safeBounds)
+            pushOffsets = offsets
         } else { pushOffsets = Array(repeating: .zero, count: apps.count) }
     }
 
