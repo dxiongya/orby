@@ -103,10 +103,10 @@ final class AppDiscoveryService {
             if let sv = sizeRef { AXValueGetValue(sv as! AXValue, .cgSize, &axSize) }
             if axSize.width < Self.minWindowSize || axSize.height < Self.minWindowSize { continue }
 
-            // Filter: skip minimized
+            // Check minimized state (include in list but mark it)
             var minRef: CFTypeRef?
             AXUIElementCopyAttributeValue(axWindow, kAXMinimizedAttribute as CFString, &minRef)
-            if let m = minRef as? Bool, m { continue }
+            let isMinimized = (minRef as? Bool) ?? false
 
             // Get AX title
             var titleRef: CFTypeRef?
@@ -166,7 +166,8 @@ final class AppDiscoveryService {
                 name: finalName,
                 ownerPid: pid,
                 windowNumber: uniqueID,
-                cgWindowID: cgID
+                cgWindowID: cgID,
+                isMinimized: isMinimized
             ))
         }
 
@@ -357,10 +358,7 @@ final class AppDiscoveryService {
                 var titleRef: CFTypeRef?
                 AXUIElementCopyAttributeValue(axWindow, kAXTitleAttribute as CFString, &titleRef)
                 if let title = titleRef as? String, title == window.name {
-                    AXUIElementPerformAction(axWindow, kAXRaiseAction as CFString)
-                    if let app = NSRunningApplication(processIdentifier: window.ownerPid) {
-                        app.activate(options: [.activateIgnoringOtherApps])
-                    }
+                    unminimizeAndRaise(axWindow, pid: window.ownerPid)
                     return
                 }
             }
@@ -369,9 +367,21 @@ final class AppDiscoveryService {
         // Fallback: activate by index
         let idx = window.id % 1000
         if idx >= 0 && idx < axWindows.count {
-            AXUIElementPerformAction(axWindows[idx], kAXRaiseAction as CFString)
+            unminimizeAndRaise(axWindows[idx], pid: window.ownerPid)
+        } else if let app = NSRunningApplication(processIdentifier: window.ownerPid) {
+            app.activate(options: [.activateIgnoringOtherApps])
         }
-        if let app = NSRunningApplication(processIdentifier: window.ownerPid) {
+    }
+
+    /// Unminimize (if needed), raise the AX window, and activate the owning app.
+    private func unminimizeAndRaise(_ axWindow: AXUIElement, pid: pid_t) {
+        var minRef: CFTypeRef?
+        AXUIElementCopyAttributeValue(axWindow, kAXMinimizedAttribute as CFString, &minRef)
+        if let minimized = minRef as? Bool, minimized {
+            AXUIElementSetAttributeValue(axWindow, kAXMinimizedAttribute as CFString, false as CFTypeRef)
+        }
+        AXUIElementPerformAction(axWindow, kAXRaiseAction as CFString)
+        if let app = NSRunningApplication(processIdentifier: pid) {
             app.activate(options: [.activateIgnoringOtherApps])
         }
     }

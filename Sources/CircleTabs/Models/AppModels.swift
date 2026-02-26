@@ -30,6 +30,7 @@ struct WindowItem: Identifiable, Equatable {
     let ownerPid: pid_t
     let windowNumber: Int
     var cgWindowID: CGWindowID = 0  // real CG window ID for preview capture
+    var isMinimized: Bool = false   // window is in Dock (minimized)
 
     // Layout properties
     var position: CGPoint = .zero

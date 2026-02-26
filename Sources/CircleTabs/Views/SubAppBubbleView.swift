@@ -31,8 +31,18 @@ struct SubAppBubbleView: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: size * 0.58, height: size * 0.58)
                 .opacity(isHovered ? 1.0 : 0.9)
+
+            // Minimized indicator
+            if window.isMinimized {
+                Image(systemName: "minus.circle.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .gray.opacity(0.7))
+                    .offset(x: size * 0.28, y: size * 0.28)
+            }
         }
         .frame(width: size, height: size)
+        .opacity(window.isMinimized ? 0.6 : 1.0)
         .scaleEffect(isHovered ? 1.2 : 1.0)
         // Close badge — outside the scaled frame
         .overlay(alignment: .topLeading) {

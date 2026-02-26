@@ -39,6 +39,52 @@ private class OptionKeyState: ObservableObject {
     }
 }
 
+/// Manages trackpad pinch-to-zoom state via NSEvent monitor (class-based for reference semantics)
+private class PreviewZoomState: ObservableObject {
+    @Published var zoom: CGFloat = 1.0
+    @Published var anchor: UnitPoint = .center
+
+    private var monitor: Any?
+    private var accumulated: CGFloat = 0
+
+    func startMonitoring() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .magnify) { [weak self] event in
+            self?.handleMagnify(event)
+            return event
+        }
+    }
+
+    func stopMonitoring() {
+        if let m = monitor { NSEvent.removeMonitor(m) }
+        monitor = nil
+    }
+
+    private func handleMagnify(_ event: NSEvent) {
+        if event.phase == .began {
+            accumulated = 0
+        }
+        accumulated += event.magnification
+
+        // Toggle zoom as soon as accumulated pinch crosses threshold
+        if accumulated > 0.1 && zoom < 1.5 {
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.75)) {
+                zoom = 2.5
+            }
+        } else if accumulated < -0.1 && zoom > 1.5 {
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.75)) {
+                zoom = 1.0
+            }
+        }
+    }
+
+    func reset() {
+        zoom = 1.0
+        anchor = .center
+        accumulated = 0
+    }
+}
+
 struct CircleTabsView: View {
     @Binding var isVisible: Bool
 
@@ -59,6 +105,8 @@ struct CircleTabsView: View {
     @State private var subAppStaggerFlags: [Bool] = []
     @State private var isHoveringPreview = false
     @State private var previewTitle: String = ""
+    @State private var previewDismissWorkItem: DispatchWorkItem?
+    @StateObject private var zoomState = PreviewZoomState()
     @State private var switchWorkItem: DispatchWorkItem?
     @State private var safeBounds: CGRect = .zero
 
@@ -411,6 +459,7 @@ struct CircleTabsView: View {
                 let imgW = img.size.width
                 let imgH = img.size.height
                 let cardW = max(imgW, 160)
+                let isZoomed = zoomState.zoom > 1.05
 
                 VStack(spacing: 0) {
                     HStack(spacing: 6) {
@@ -433,16 +482,43 @@ struct CircleTabsView: View {
                             .truncationMode(.middle)
 
                         Spacer()
+
+                        // Zoom indicator
+                        if isZoomed {
+                            Text(String(format: "%.0f%%", zoomState.zoom * 100))
+                                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.5))
+                                .transition(.opacity)
+                        }
                     }
                     .padding(.horizontal, 10)
                     .padding(.top, 8)
                     .padding(.bottom, 6)
 
+                    // Zoomable preview image
                     Image(nsImage: img)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
+                        .scaleEffect(zoomState.zoom, anchor: zoomState.anchor)
                         .frame(width: imgW, height: imgH)
+                        .clipped()
                         .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .contentShape(Rectangle())
+                        .onContinuousHover { phase in
+                            if case .active(let loc) = phase {
+                                let anchor = UnitPoint(
+                                    x: max(0, min(1, loc.x / imgW)),
+                                    y: max(0, min(1, loc.y / imgH))
+                                )
+                                if zoomState.zoom > 1.05 {
+                                    withAnimation(.easeOut(duration: 0.08)) {
+                                        zoomState.anchor = anchor
+                                    }
+                                } else {
+                                    zoomState.anchor = anchor
+                                }
+                            }
+                        }
                         .padding(.horizontal, 6)
                         .padding(.bottom, 6)
                 }
@@ -455,28 +531,64 @@ struct CircleTabsView: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                        .strokeBorder(Color.white.opacity(isZoomed ? 0.25 : 0.12), lineWidth: 1)
                 )
-                .scaleEffect(isHoveringPreview ? 1.06 : 1.0)
+                .scaleEffect(isHoveringPreview && !isZoomed ? 1.06 : 1.0)
                 .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isHoveringPreview)
                 .position(x: previewPosition.x, y: previewPosition.y)
                 .onContinuousHover { phase in
                     if case .active = phase {
-                        isHoveringPreview = true
+                        if !isHoveringPreview {
+                            isHoveringPreview = true
+                            cancelPreviewDismiss()
+                            zoomState.startMonitoring()
+                        }
                     } else {
                         isHoveringPreview = false
+                        zoomState.stopMonitoring()
+                        if zoomState.zoom > 1.0 {
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                                zoomState.zoom = 1.0
+                            }
+                        }
                     }
                 }
                 .onTapGesture {
-                    if let idx = expandedAppIndex, idx < apps.count,
+                    if isZoomed {
+                        withAnimation(.spring(response: 0.2, dampingFraction: 0.75)) {
+                            zoomState.zoom = 1.0
+                        }
+                    } else if let idx = expandedAppIndex, idx < apps.count,
                        let wIdx = hoveredSubAppIndex, wIdx < apps[idx].windows.count {
                         AppDiscoveryService.shared.activateWindow(apps[idx].windows[wIdx])
+                        dismiss()
+                    } else if let idx = hoveredAppIndex, idx < apps.count,
+                              apps[idx].windows.count == 1 {
+                        AppDiscoveryService.shared.activateWindow(apps[idx].windows[0])
                         dismiss()
                     }
                 }
                 .transition(.scale(scale: 0.7).combined(with: .opacity))
             }
         }
+    }
+
+    // MARK: - Preview Dismiss Timer
+
+    /// Schedule delayed preview dismissal (gives mouse time to reach the preview card)
+    private func schedulePreviewDismiss() {
+        guard previewDismissWorkItem == nil else { return }
+        let work = DispatchWorkItem { [self] in
+            previewDismissWorkItem = nil
+            withAnimation(quickSpring) { clearPreviewNow() }
+        }
+        previewDismissWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+    }
+
+    private func cancelPreviewDismiss() {
+        previewDismissWorkItem?.cancel()
+        previewDismissWorkItem = nil
     }
 
     // MARK: - Logic
@@ -546,6 +658,7 @@ struct CircleTabsView: View {
         if let idx = expandedAppIndex, idx < apps.count {
             if let sub = CircularLayoutEngine.findClosestSubApp(to: loc, in: apps[idx].windows, threshold: CircularLayoutEngine.subBubbleRadius + 18) {
                 let winId = apps[idx].windows[sub].id
+                cancelPreviewDismiss()
                 withAnimation(quickSpring) { hoveredSubAppIndex = sub; hoveredAppIndex = idx }
                 if winId != previewForWindowId {
                     clearPreviewNow()
@@ -577,12 +690,31 @@ struct CircleTabsView: View {
             return
         }
 
+        // STEP 4.5: preview for single-window apps (hover main bubble)
+        if let idx = appIdx, expandedAppIndex == nil, apps[idx].windows.count == 1 {
+            let win = apps[idx].windows[0]
+            cancelPreviewDismiss()
+            if win.id != previewForWindowId && !win.isMinimized {
+                clearPreviewNow()
+                let off = offset(for: idx)
+                let anchor = CGPoint(x: apps[idx].position.x + off.x, y: apps[idx].position.y + off.y)
+                schedulePreview(for: idx, windowIndex: 0, windowId: win.id, anchorOverride: anchor)
+            }
+            return
+        }
+
         // STEP 5: clear sub hover (but keep preview if mouse is over it)
         if expandedAppIndex != nil {
             let overPreview = isHoveringPreview || isMouseOverPreview(loc)
             if overPreview { return }
             withAnimation(quickSpring) { hoveredSubAppIndex = nil }
-            clearPreviewNow()
+            schedulePreviewDismiss()
+        }
+
+        // STEP 5b: clear single-window preview when hovering nothing
+        if expandedAppIndex == nil && previewImage != nil && appIdx == nil {
+            let overPreview = isHoveringPreview || isMouseOverPreview(loc)
+            if !overPreview { schedulePreviewDismiss() }
         }
 
         // STEP 6: collapse near center
@@ -648,16 +780,17 @@ struct CircleTabsView: View {
         }
     }
 
-    private func schedulePreview(for appIdx: Int, windowIndex wIdx: Int, windowId: Int) {
+    private func schedulePreview(for appIdx: Int, windowIndex wIdx: Int, windowId: Int, anchorOverride: CGPoint? = nil) {
         guard SettingsManager.shared.showPreview else { return }
         hoverTimer?.cancel()
+        cancelPreviewDismiss()
         previewForWindowId = windowId
 
         let delay = SettingsManager.shared.previewDelay
         let work = DispatchWorkItem { [self] in
             guard appIdx < apps.count, wIdx < apps[appIdx].windows.count else { return }
             let win = apps[appIdx].windows[wIdx]
-            guard win.id == windowId else { return }
+            guard win.id == windowId, !win.isMinimized else { return }
             if let img = AppDiscoveryService.shared.captureWindowPreview(cgWindowID: win.cgWindowID) {
                 withAnimation(quickSpring) {
                     previewImage = img
@@ -665,9 +798,9 @@ struct CircleTabsView: View {
 
                     let cardW = max(img.size.width, 160) + 12
                     let cardH = img.size.height + 40
+                    let anchor = anchorOverride ?? win.position
                     let pos = findBestPreviewPosition(
-                        anchor: win.position, cardSize: CGSize(width: cardW, height: cardH),
-                        expandedIdx: appIdx
+                        anchor: anchor, cardSize: CGSize(width: cardW, height: cardH)
                     )
                     previewPosition = pos
                     previewFrame = CGRect(
@@ -682,7 +815,7 @@ struct CircleTabsView: View {
     }
 
     /// Find the best position for the preview card that avoids overlapping bubbles.
-    private func findBestPreviewPosition(anchor: CGPoint, cardSize: CGSize, expandedIdx: Int) -> CGPoint {
+    private func findBestPreviewPosition(anchor: CGPoint, cardSize: CGSize) -> CGPoint {
         let halfW = cardSize.width / 2
         let halfH = cardSize.height / 2
         let margin: CGFloat = 8
@@ -701,8 +834,8 @@ struct CircleTabsView: View {
                 mainR * app.bubbleScale
             ))
         }
-        // Sub-app bubbles
-        if expandedIdx < apps.count {
+        // Sub-app bubbles (only if an app is expanded)
+        if let expandedIdx = expandedAppIndex, expandedIdx < apps.count {
             let subR = CircularLayoutEngine.subBubbleRadius
             for w in apps[expandedIdx].windows {
                 obstacles.append((w.position, subR))
@@ -765,11 +898,14 @@ struct CircleTabsView: View {
     private func clearPreviewNow() {
         hoverTimer?.cancel()
         hoverTimer = nil
+        cancelPreviewDismiss()
         previewForWindowId = -1
         previewImage = nil
         previewTitle = ""
         isHoveringPreview = false
         previewFrame = .zero
+        zoomState.stopMonitoring()
+        zoomState.reset()
     }
 
     private func closePreviewWindow() {
@@ -797,14 +933,26 @@ struct CircleTabsView: View {
         }
         let clickR = CircularLayoutEngine.effectiveBubbleRadius(for: apps.count)
         if let idx = CircularLayoutEngine.findClosestApp(to: loc, in: apps, offsets: pushOffsets, threshold: clickR + 12) {
-            if apps[idx].windows.count <= 1 { AppDiscoveryService.shared.activateApp(apps[idx]); dismiss() }
+            if apps[idx].windows.count <= 1 {
+                if apps[idx].windows.count == 1 {
+                    AppDiscoveryService.shared.activateWindow(apps[idx].windows[0])
+                } else {
+                    AppDiscoveryService.shared.activateApp(apps[idx])
+                }
+                dismiss()
+            }
         }
     }
 
     private func tapApp(_ i: Int) {
         guard closeMode == .none else { return }
         if apps[i].windows.count <= 1 {
-            AppDiscoveryService.shared.activateApp(apps[i]); dismiss()
+            if apps[i].windows.count == 1 {
+                AppDiscoveryService.shared.activateWindow(apps[i].windows[0])
+            } else {
+                AppDiscoveryService.shared.activateApp(apps[i])
+            }
+            dismiss()
         } else if expandedAppIndex == i {
             collapseSubApps()
         } else {
