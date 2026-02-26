@@ -211,16 +211,16 @@ final class AppDiscoveryService {
 
     /// Non-blocking async refresh — uses cached titles until new ones arrive.
     private func refreshSCWindowTitlesAsync() {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: true) { content, _ in
-                guard let windows = content?.windows else { return }
-                var titles: [CGWindowID: String] = [:]
-                for w in windows {
-                    if let title = w.title, !title.isEmpty {
-                        titles[w.windowID] = title
-                    }
+        SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: true) { [weak self] content, _ in
+            guard let windows = content?.windows else { return }
+            var titles: [CGWindowID: String] = [:]
+            for w in windows {
+                if let title = w.title, !title.isEmpty {
+                    titles[w.windowID] = title
                 }
-                // Update cache — next getRunningApps() call will pick up fresh titles
+            }
+            // Dispatch to main thread to avoid data race with reads in getRunningApps()
+            DispatchQueue.main.async {
                 self?.scWindowTitles = titles
             }
         }
@@ -260,28 +260,90 @@ final class AppDiscoveryService {
 
     // MARK: - Preview Capture
 
+    /// Track whether screen capture via CGWindowList is known to work.
+    /// Avoids repeated blocking calls that trigger macOS 15 permission dialogs.
+    private var cgCaptureAvailable: Bool?
+
     /// Capture window preview asynchronously on a background thread.
+    /// Actually downscales the image to avoid loading full-resolution bitmaps into SwiftUI.
     func captureWindowPreviewAsync(cgWindowID: CGWindowID, maxSize: CGFloat = 320, completion: @escaping (NSImage?) -> Void) {
         guard cgWindowID > 0 else { completion(nil); return }
-        DispatchQueue.global(qos: .userInitiated).async {
-            guard let cgImage = CGWindowListCreateImage(
+
+        // If we already know CGWindowList capture is broken (e.g. macOS 15 temporary access only), skip
+        if cgCaptureAvailable == false { completion(nil); return }
+
+        let captureCompleted = DispatchSemaphore(value: 0)
+        var finished = false
+        let lock = NSLock()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            // Use .nominalResolution instead of .bestResolution to get 1x image (faster, smaller)
+            let cgImage = CGWindowListCreateImage(
                 .null, .optionIncludingWindow, cgWindowID,
-                [.boundsIgnoreFraming, .bestResolution]
-            ) else { DispatchQueue.main.async { completion(nil) }; return }
+                [.boundsIgnoreFraming, .nominalResolution]
+            )
+
+            lock.lock()
+            let alreadyTimedOut = finished
+            if !alreadyTimedOut { finished = true }
+            lock.unlock()
+            captureCompleted.signal()
+
+            if alreadyTimedOut { return } // timed out, result discarded
+
+            guard let cgImage = cgImage else {
+                DispatchQueue.main.async {
+                    self?.cgCaptureAvailable = false
+                    completion(nil)
+                }
+                return
+            }
 
             let pixelW = CGFloat(cgImage.width)
             let pixelH = CGFloat(cgImage.height)
-            guard pixelW > 0, pixelH > 0 else { DispatchQueue.main.async { completion(nil) }; return }
+            guard pixelW > 0, pixelH > 0 else {
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
 
-            let screenScale = NSScreen.main?.backingScaleFactor ?? 2.0
-            let ptW = pixelW / screenScale
-            let ptH = pixelH / screenScale
-            let scale = min(maxSize / ptW, maxSize / ptH, 1.0)
-            let newW = ptW * scale
-            let newH = ptH * scale
+            // Mark capture as working
+            if self?.cgCaptureAvailable != true {
+                DispatchQueue.main.async { self?.cgCaptureAvailable = true }
+            }
 
-            let image = NSImage(cgImage: cgImage, size: NSSize(width: newW, height: newH))
-            DispatchQueue.main.async { completion(image) }
+            // Actually downscale the image to target size (not just wrapping at display size)
+            let scale = min(maxSize / pixelW, maxSize / pixelH, 1.0)
+            let newW = pixelW * scale
+            let newH = pixelH * scale
+
+            let resized = NSImage(size: NSSize(width: newW, height: newH))
+            resized.lockFocus()
+            NSGraphicsContext.current?.imageInterpolation = .high
+            NSRect(x: 0, y: 0, width: newW, height: newH).fill(using: .clear)
+            let rep = NSBitmapImageRep(cgImage: cgImage)
+            rep.draw(in: NSRect(x: 0, y: 0, width: newW, height: newH))
+            resized.unlockFocus()
+
+            DispatchQueue.main.async { completion(resized) }
+        }
+
+        // Timeout: if CGWindowListCreateImage doesn't complete in 1.5s, give up.
+        // This prevents hangs from macOS 15 screen recording re-prompts.
+        DispatchQueue.global(qos: .utility).async {
+            let result = captureCompleted.wait(timeout: .now() + 1.5)
+            if result == .timedOut {
+                lock.lock()
+                let alreadyDone = finished
+                if !alreadyDone { finished = true }
+                lock.unlock()
+
+                if !alreadyDone {
+                    DispatchQueue.main.async {
+                        self.cgCaptureAvailable = false
+                        completion(nil)
+                    }
+                }
+            }
         }
     }
 

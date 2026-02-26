@@ -18,20 +18,20 @@ struct PermissionGuideView: View {
                 .foregroundColor(.accentColor)
                 .padding(.top, 8)
 
-            Text("CircleTabs 需要以下权限")
+            Text("Orby needs the following permissions")
                 .font(.system(size: 17, weight: .bold, design: .rounded))
 
             // Status list
             VStack(spacing: 10) {
                 permissionRow(
-                    name: "辅助功能",
-                    detail: "用于全局快捷键和窗口管理",
+                    name: "Accessibility",
+                    detail: "For global hotkey and window management",
                     icon: "hand.raised",
                     granted: hasAccessibility
                 )
                 permissionRow(
-                    name: "屏幕录制",
-                    detail: "用于窗口预览截图",
+                    name: "Screen Recording",
+                    detail: "For window preview screenshots",
                     icon: "rectangle.dashed.badge.record",
                     granted: hasScreenRecording
                 )
@@ -40,7 +40,7 @@ struct PermissionGuideView: View {
             .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
 
             if allGranted {
-                Text("所有权限已授予，正在启动...")
+                Text("All permissions granted. Starting...")
                     .font(.system(size: 13))
                     .foregroundColor(.green)
             } else {
@@ -50,7 +50,7 @@ struct PermissionGuideView: View {
                         Button(action: grantAccessibility) {
                             HStack {
                                 Image(systemName: "hand.raised")
-                                Text("授权辅助功能")
+                                Text("Grant Accessibility")
                             }
                             .frame(maxWidth: .infinity)
                         }
@@ -62,7 +62,7 @@ struct PermissionGuideView: View {
                         Button(action: grantScreenRecording) {
                             HStack {
                                 Image(systemName: "rectangle.dashed.badge.record")
-                                Text("授权屏幕录制")
+                                Text("Grant Screen Recording")
                             }
                             .frame(maxWidth: .infinity)
                         }
@@ -73,7 +73,7 @@ struct PermissionGuideView: View {
                     Button(action: revealInFinder) {
                         HStack {
                             Image(systemName: "folder")
-                            Text("在 Finder 中显示 App")
+                            Text("Reveal App in Finder")
                         }
                     }
                     .controlSize(.regular)
@@ -83,7 +83,7 @@ struct PermissionGuideView: View {
                 }
                 .frame(maxWidth: 260)
 
-                Text("点击按钮后在系统弹窗中允许，授权后自动启动")
+                Text("Click the button, then allow in the system dialog. Auto-starts after granting.")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -132,6 +132,12 @@ struct PermissionGuideView: View {
                 if content != nil {
                     // Permission granted (temporary or permanent)
                     withAnimation { hasScreenRecording = true }
+                    // Warm up CGWindowList access so it won't trigger a second prompt later.
+                    // This proactive capture (on a background thread) ensures both SCKit and
+                    // CGWindowList APIs are authorized during the permission setup phase.
+                    DispatchQueue.global(qos: .utility).async {
+                        _ = CGWindowListCreateImage(.null, .optionOnScreenOnly, kCGNullWindowID, .nominalResolution)
+                    }
                 } else {
                     // Dialog was dismissed / denied — open System Settings as fallback
                     openScreenRecordingSettings()

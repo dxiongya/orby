@@ -1,6 +1,6 @@
-name: CircleTabs
+name: Orby
 options:
-  bundleIdPrefix: com.circletabs
+  bundleIdPrefix: com.orby
   deploymentTarget:
     macOS: "13.0"
   xcodeVersion: "15.0"
@@ -11,22 +11,22 @@ settings:
     MACOSX_DEPLOYMENT_TARGET: "13.0"
     CODE_SIGN_IDENTITY: "-"
     CODE_SIGN_STYLE: Automatic
-    PRODUCT_BUNDLE_IDENTIFIER: com.circletabs.app
+    PRODUCT_BUNDLE_IDENTIFIER: com.orby.app
     INFOPLIST_FILE: Info.plist
-    CODE_SIGN_ENTITLEMENTS: CircleTabs.entitlements
+    CODE_SIGN_ENTITLEMENTS: Orby.entitlements
     LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
 targets:
-  CircleTabs:
+  Orby:
     type: application
     platform: macOS
     sources:
       - path: Sources
     settings:
       base:
-        PRODUCT_NAME: CircleTabs
+        PRODUCT_NAME: Orby
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         COMBINE_HIDPI_IMAGES: true
     info:
       path: Info.plist
     entitlements:
-      path: CircleTabs.entitlements
+      path: Orby.entitlements

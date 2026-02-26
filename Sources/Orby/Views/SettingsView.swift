@@ -22,7 +22,7 @@ struct SettingsView: View {
                     Image(systemName: "gearshape.fill")
                         .font(.system(size: 14))
                         .foregroundColor(.secondary)
-                    Text("CircleTabs Settings")
+                    Text("Orby Settings")
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                 }
                 .padding(.horizontal, 20)

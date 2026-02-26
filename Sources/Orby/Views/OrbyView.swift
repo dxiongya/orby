@@ -106,7 +106,7 @@ private class ClosureMenuItem: NSMenuItem {
     @objc func performClosure() { handler?() }
 }
 
-struct CircleTabsView: View {
+struct OrbyView: View {
     @Binding var isVisible: Bool
 
     @ObservedObject private var tagManager = TagManager.shared

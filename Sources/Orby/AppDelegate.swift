@@ -3,7 +3,7 @@ import SwiftUI
 import ScreenCaptureKit
 
 extension Notification.Name {
-    static let escapePressed = Notification.Name("CircleTabsEscapePressed")
+    static let escapePressed = Notification.Name("OrbyEscapePressed")
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -30,7 +30,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if hasAX {
-            // AX is fine, check screen recording via ScreenCaptureKit
             SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { [weak self] content, _ in
                 DispatchQueue.main.async {
                     if content != nil {
@@ -46,13 +45,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Start hotkey after permission is confirmed
     private func startApp() {
         setupHotKey()
         QuickLaunchManager.shared.startMonitoring()
         closePermissionGuide()
 
-        // Show onboarding on first launch
         if !UserDefaults.standard.bool(forKey: "onboardingCompleted") {
             showOnboarding()
         }
@@ -75,7 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "Welcome to CircleTabs"
+        window.title = "Welcome to Orby"
         window.contentView = NSHostingView(rootView: view)
         window.center()
         window.isReleasedWhenClosed = false
@@ -88,7 +85,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Permission Guide
 
     private func showPermissionGuide() {
-        // Don't trigger system dialogs here — PermissionGuideView handles it on button click
         let guideView = PermissionGuideView {
             DispatchQueue.main.async { [weak self] in
                 self?.startApp()
@@ -101,7 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "CircleTabs"
+        window.title = "Orby"
         window.contentView = NSHostingView(rootView: guideView)
         window.center()
         window.isReleasedWhenClosed = false
@@ -119,7 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func resetAccessibilityTCC() {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
-        task.arguments = ["reset", "Accessibility", Bundle.main.bundleIdentifier ?? "com.circletabs.app"]
+        task.arguments = ["reset", "Accessibility", Bundle.main.bundleIdentifier ?? "com.orby.app"]
         task.standardOutput = FileHandle.nullDevice
         task.standardError = FileHandle.nullDevice
         try? task.run()
@@ -131,10 +127,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupStatusBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         guard let button = statusItem.button else { return }
-        button.image = NSImage(systemSymbolName: "circle.grid.3x3.fill", accessibilityDescription: "CircleTabs")
+        button.image = NSImage(systemSymbolName: "circle.grid.3x3.fill", accessibilityDescription: "Orby")
 
         let menu = NSMenu()
-        let show = NSMenuItem(title: "Show CircleTabs", action: #selector(toggleOverlay), keyEquivalent: "")
+        let show = NSMenuItem(title: "Show Orby", action: #selector(toggleOverlay), keyEquivalent: "")
         show.target = self
         menu.addItem(show)
         menu.addItem(NSMenuItem.separator())
@@ -179,7 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "CircleTabs Settings"
+        window.title = "Orby Settings"
         window.contentView = NSHostingView(rootView: settingsView)
         window.center()
         window.isReleasedWhenClosed = false
@@ -202,7 +198,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if event.keyCode == 53 {
                 guard self?.isOverlayVisible == true else { return event }
-                // Post notification — CircleTabsView decides whether to exit close mode or dismiss
                 NotificationCenter.default.post(name: .escapePressed, object: nil)
                 return nil
             }
@@ -232,7 +227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             get: { [weak self] in self?.isOverlayVisible ?? false },
             set: { [weak self] v in if !v { DispatchQueue.main.async { self?.hideOverlay() } } }
         )
-        panel.contentView = NSHostingView(rootView: CircleTabsView(isVisible: binding))
+        panel.contentView = NSHostingView(rootView: OrbyView(isVisible: binding))
         panel.showOverlay()
         overlayPanel = panel
     }

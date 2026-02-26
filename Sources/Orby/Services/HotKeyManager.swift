@@ -19,7 +19,7 @@ final class HotKeyManager {
     }
 
     private static func dbg(_ msg: String) {
-        let path = "/tmp/circletabs_debug.txt"
+        let path = "/tmp/orby_debug.txt"
         let line = "[HotKey \(Date())] \(msg)\n"
         if let fh = FileHandle(forWritingAtPath: path) {
             fh.seekToEndOfFile(); fh.write(line.data(using: .utf8)!); fh.closeFile()

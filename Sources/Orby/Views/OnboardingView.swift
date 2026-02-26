@@ -10,7 +10,7 @@ struct OnboardingView: View {
             title: "Quick Start",
             subtitle: "Summon your apps in a circle",
             keys: "⌥ Tab",
-            detail: "Press the hotkey to open CircleTabs.\nAll running apps appear around your cursor.\nClick any app to switch instantly."
+            detail: "Press the hotkey to open Orby.\nAll running apps appear around your cursor.\nClick any app to switch instantly."
         ),
         (
             icon: "cursorarrow.and.square.on.square.dashed",
@@ -24,14 +24,14 @@ struct OnboardingView: View {
             title: "Quick Launch",
             subtitle: "One key to reach any app",
             keys: "⌥ 1–9",
-            detail: "Right-click any app or window bubble.\nBind it to ⌥+Number for instant access.\nWorks globally — even outside CircleTabs."
+            detail: "Right-click any app or window bubble.\nBind it to ⌥+Number for instant access.\nWorks globally — even outside Orby."
         ),
         (
             icon: "option",
             title: "Reveal Names",
             subtitle: "See all window titles at once",
             keys: "Hold ⌥",
-            detail: "Hold the Option key while CircleTabs is open.\nAll sub-app window names appear instantly.\nRelease to hide them again."
+            detail: "Hold the Option key while Orby is open.\nAll sub-app window names appear instantly.\nRelease to hide them again."
         ),
         (
             icon: "tag.fill",
