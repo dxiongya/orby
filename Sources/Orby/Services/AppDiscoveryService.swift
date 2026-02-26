@@ -210,7 +210,10 @@ final class AppDiscoveryService {
     // MARK: - ScreenCaptureKit Window Titles
 
     /// Non-blocking async refresh — uses cached titles until new ones arrive.
+    /// Only calls SCShareableContent when screen recording permission is confirmed,
+    /// to avoid triggering the macOS 15 system dialog during normal usage.
     private func refreshSCWindowTitlesAsync() {
+        guard CGPreflightScreenCaptureAccess() else { return }
         SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: true) { [weak self] content, _ in
             guard let windows = content?.windows else { return }
             var titles: [CGWindowID: String] = [:]
@@ -219,7 +222,6 @@ final class AppDiscoveryService {
                     titles[w.windowID] = title
                 }
             }
-            // Dispatch to main thread to avoid data race with reads in getRunningApps()
             DispatchQueue.main.async {
                 self?.scWindowTitles = titles
             }
