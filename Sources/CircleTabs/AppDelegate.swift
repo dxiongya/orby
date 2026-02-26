@@ -48,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Start hotkey after permission is confirmed
     private func startApp() {
         setupHotKey()
+        QuickLaunchManager.shared.startMonitoring()
         closePermissionGuide()
     }
 
@@ -137,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 440),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 580),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -211,7 +212,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
     }
 
-    @objc private func quitApp() { hotKeyManager.stop(); NSApp.terminate(nil) }
+    @objc private func quitApp() {
+        hotKeyManager.stop()
+        QuickLaunchManager.shared.stopMonitoring()
+        NSApp.terminate(nil)
+    }
 
     func applicationWillTerminate(_ notification: Notification) {
         hotKeyManager.stop()

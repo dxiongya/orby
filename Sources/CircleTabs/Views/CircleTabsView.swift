@@ -85,8 +85,24 @@ private class PreviewZoomState: ObservableObject {
     }
 }
 
+/// NSMenuItem subclass that stores an action closure for menu item callbacks
+private class ClosureMenuItem: NSMenuItem {
+    var handler: (() -> Void)?
+
+    convenience init(title: String, closure: @escaping () -> Void) {
+        self.init(title: title, action: #selector(performClosure), keyEquivalent: "")
+        self.target = self
+        self.handler = closure
+    }
+
+    @objc func performClosure() { handler?() }
+}
+
 struct CircleTabsView: View {
     @Binding var isVisible: Bool
+
+    @ObservedObject private var tagManager = TagManager.shared
+    @ObservedObject private var quickLaunch = QuickLaunchManager.shared
 
     @State private var center: CGPoint = CGPoint(x: -1, y: -1)
     @State private var apps: [AppItem] = []
@@ -109,6 +125,7 @@ struct CircleTabsView: View {
     @StateObject private var zoomState = PreviewZoomState()
     @State private var switchWorkItem: DispatchWorkItem?
     @State private var safeBounds: CGRect = .zero
+    @State private var rightClickMonitor: Any?
 
     // Close mode state
     @State private var closeMode: CloseMode = .none
@@ -332,6 +349,7 @@ struct CircleTabsView: View {
         mousePos = cursorPos
         loadApps(around: cursorPos)
         optionKey.startMonitoring()
+        startRightClickMonitor()
         withAnimation(jellySpring) { appeared = true }
         animateStaggeredEntrance()
     }
@@ -411,7 +429,9 @@ struct CircleTabsView: View {
                 isExpanded: expandedAppIndex == i,
                 dimLevel: dimLevel(for: i),
                 offset: offset(for: i),
-                isInCloseMode: closeMode == .mainApps
+                isInCloseMode: closeMode == .mainApps,
+                tags: tagManager.tags(for: apps[i].id),
+                quickSlot: quickLaunch.slot(for: apps[i].id)
             )
             .zIndex(hoveredAppIndex == i ? 100 : 0)
             .offset(x: flyX, y: flyY)
@@ -434,7 +454,9 @@ struct CircleTabsView: View {
                         parentIcon: apps[idx].icon,
                         isHovered: hoveredSubAppIndex == wIdx,
                         showLabel: hoveredSubAppIndex == wIdx || optionKey.isHeld,
-                        isInCloseMode: closeMode == .subApps
+                        isInCloseMode: closeMode == .subApps,
+                        tags: tagManager.tags(for: TagManager.key(for: apps[idx].id, windowName: apps[idx].windows[wIdx].name)),
+                        quickSlot: quickLaunch.slot(for: apps[idx].id, windowName: apps[idx].windows[wIdx].name)
                     )
                     .zIndex(hoveredSubAppIndex == wIdx ? 100 : 0)
                     .scaleEffect(vis ? 1.0 : 0.01)
@@ -988,8 +1010,139 @@ struct CircleTabsView: View {
         cancelLongPress()
         clearPreviewNow()
         optionKey.stopMonitoring()
+        stopRightClickMonitor()
         closeMode = .none
         withAnimation(.easeOut(duration: 0.18)) { appeared = false }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { isVisible = false }
+    }
+
+    // MARK: - Right-Click Context Menu
+
+    private func startRightClickMonitor() {
+        guard rightClickMonitor == nil else { return }
+        rightClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .rightMouseDown) { [self] event in
+            guard closeMode == .none else { return event }
+            guard let window = event.window, let contentView = window.contentView else { return event }
+
+            let windowHeight = window.frame.height
+            let loc = CGPoint(x: event.locationInWindow.x, y: windowHeight - event.locationInWindow.y)
+
+            // Sub-apps first (higher z-order)
+            if let idx = expandedAppIndex, idx < apps.count,
+               let sub = CircularLayoutEngine.findClosestSubApp(
+                   to: loc, in: apps[idx].windows,
+                   threshold: CircularLayoutEngine.subBubbleRadius + 12
+               ) {
+                let menu = buildContextMenu(for: idx, windowIdx: sub)
+                NSMenu.popUpContextMenu(menu, with: event, for: contentView)
+                return nil
+            }
+
+            // Main apps
+            let effectiveR = CircularLayoutEngine.effectiveBubbleRadius(for: apps.count)
+            if let idx = CircularLayoutEngine.findClosestApp(
+                to: loc, in: apps, offsets: pushOffsets, threshold: effectiveR + 12
+            ) {
+                let menu = buildContextMenu(for: idx)
+                NSMenu.popUpContextMenu(menu, with: event, for: contentView)
+                return nil
+            }
+
+            return event
+        }
+    }
+
+    private func stopRightClickMonitor() {
+        if let m = rightClickMonitor { NSEvent.removeMonitor(m); rightClickMonitor = nil }
+    }
+
+    private func buildContextMenu(for appIdx: Int, windowIdx: Int? = nil) -> NSMenu {
+        let menu = NSMenu()
+        let app = apps[appIdx]
+        let bundleId = app.id
+
+        let key: String
+        let displayName: String
+        var windowName: String? = nil
+
+        if let wIdx = windowIdx, wIdx < app.windows.count {
+            let win = app.windows[wIdx]
+            key = TagManager.key(for: bundleId, windowName: win.name)
+            displayName = win.name.isEmpty ? app.name : win.name
+            windowName = win.name
+        } else {
+            key = TagManager.key(for: bundleId)
+            displayName = app.name
+        }
+
+        // ── Tag section ──
+        let tagHeader = NSMenuItem(title: "标记标签", action: nil, keyEquivalent: "")
+        tagHeader.isEnabled = false
+        tagHeader.attributedTitle = NSAttributedString(
+            string: "标记标签",
+            attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.secondaryLabelColor]
+        )
+        menu.addItem(tagHeader)
+
+        let assignedIds = tagManager.assignments[key] ?? []
+        for tag in tagManager.presetTags {
+            let assigned = assignedIds.contains(tag.id)
+            let item = ClosureMenuItem(title: "\(tag.emoji) \(tag.name)") { [weak tagManager] in
+                tagManager?.toggleTag(tag, for: key)
+            }
+            item.state = assigned ? .on : .off
+            menu.addItem(item)
+        }
+
+        if !assignedIds.isEmpty {
+            menu.addItem(.separator())
+            let clear = ClosureMenuItem(title: "清除标签") { [weak tagManager] in
+                tagManager?.clearTags(for: key)
+            }
+            menu.addItem(clear)
+        }
+
+        menu.addItem(.separator())
+
+        // ── Quick launch section ──
+        let quickHeader = NSMenuItem(title: "绑定快捷键", action: nil, keyEquivalent: "")
+        quickHeader.isEnabled = false
+        quickHeader.attributedTitle = NSAttributedString(
+            string: "绑定快捷键",
+            attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.secondaryLabelColor]
+        )
+        menu.addItem(quickHeader)
+
+        let currentSlot = quickLaunch.slot(for: bundleId, windowName: windowName)
+
+        for slot in 1...9 {
+            let existing = quickLaunch.bindings[slot]
+            let title: String
+            if existing?.bundleId == bundleId && existing?.windowName == windowName {
+                title = "⌥\(slot) ✓"
+            } else if let existing = existing {
+                title = "⌥\(slot)  →  \(existing.displayName)"
+            } else {
+                title = "⌥\(slot)"
+            }
+
+            let item = ClosureMenuItem(title: title) { [weak quickLaunch] in
+                quickLaunch?.bind(slot: slot, bundleId: bundleId, windowName: windowName, displayName: displayName)
+            }
+            if existing?.bundleId == bundleId && existing?.windowName == windowName {
+                item.state = .on
+            }
+            menu.addItem(item)
+        }
+
+        if currentSlot != nil {
+            menu.addItem(.separator())
+            let unbind = ClosureMenuItem(title: "取消绑定") { [weak quickLaunch] in
+                if let s = currentSlot { quickLaunch?.unbind(slot: s) }
+            }
+            menu.addItem(unbind)
+        }
+
+        return menu
     }
 }

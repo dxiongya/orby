@@ -2,165 +2,336 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var settings = SettingsManager.shared
+    @ObservedObject var tagManager = TagManager.shared
+    @ObservedObject var quickLaunch = QuickLaunchManager.shared
     @State private var isRecording = false
     @State private var recordingDisplay = ""
     @State private var keyMonitor: Any?
     @State private var mouseMonitor: Any?
+    @State private var isAddingTag = false
+    @State private var newTagName = ""
+    @State private var newTagColor = "blue"
     var onStartRecording: (() -> Void)?
     var onStopRecording: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 14))
-                    .foregroundColor(.secondary)
-                Text("CircleTabs 设置")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
-            .padding(.bottom, 16)
-
-            Divider()
-                .padding(.horizontal, 16)
-
-            // Hotkey section
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 6) {
-                    Image(systemName: "keyboard")
-                        .font(.system(size: 12))
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                // Header
+                HStack {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 14))
                         .foregroundColor(.secondary)
-                    Text("快捷键绑定")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.primary)
+                    Text("CircleTabs 设置")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 16)
 
-                // Hotkey list
-                VStack(spacing: 4) {
-                    ForEach(settings.hotKeys) { combo in
-                        HStack {
-                            Text(combo.displayString)
-                                .font(.system(size: 13, weight: .medium, design: .monospaced))
-                                .foregroundColor(.primary)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(Color(nsColor: .controlBackgroundColor))
-                                )
+                Divider()
+                    .padding(.horizontal, 16)
 
-                            Spacer()
+                hotkeySection
+                Divider().padding(.horizontal, 16)
+                previewSection
+                Divider().padding(.horizontal, 16)
+                tagPresetsSection
+                Divider().padding(.horizontal, 16)
+                quickLaunchSection
 
-                            if settings.hotKeys.count > 1 {
-                                Button(action: {
-                                    withAnimation(.easeOut(duration: 0.2)) {
-                                        settings.removeHotKey(combo)
-                                    }
-                                }) {
-                                    Image(systemName: "minus.circle.fill")
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.red.opacity(0.7))
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.horizontal, 4)
-                    }
-                }
-                .padding(8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
-                )
+                Spacer(minLength: 16)
+            }
+        }
+        .frame(width: 360, height: 580)
+        .onDisappear { stopRecording() }
+    }
 
-                // Add / Record button
-                if isRecording {
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 8, height: 8)
-                        Text(recordingDisplay.isEmpty ? "按下按键/鼠标组合..." : recordingDisplay)
-                            .font(.system(size: 12, design: .rounded))
-                            .foregroundColor(.secondary)
+    // MARK: - Hotkey Section
+
+    private var hotkeySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "keyboard")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                Text("快捷键绑定")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.primary)
+            }
+
+            VStack(spacing: 4) {
+                ForEach(settings.hotKeys) { combo in
+                    HStack {
+                        Text(combo.displayString)
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            .foregroundColor(.primary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color(nsColor: .controlBackgroundColor))
+                            )
                         Spacer()
-                        Button("取消") {
-                            stopRecording()
+                        if settings.hotKeys.count > 1 {
+                            Button {
+                                withAnimation(.easeOut(duration: 0.2)) { settings.removeHotKey(combo) }
+                            } label: {
+                                Image(systemName: "minus.circle.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.red.opacity(0.7))
+                            }
+                            .buttonStyle(.plain)
                         }
+                    }
+                    .padding(.horizontal, 4)
+                }
+            }
+            .padding(8)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+            )
+
+            if isRecording {
+                HStack(spacing: 8) {
+                    Circle().fill(Color.red).frame(width: 8, height: 8)
+                    Text(recordingDisplay.isEmpty ? "按下按键/鼠标组合..." : recordingDisplay)
+                        .font(.system(size: 12, design: .rounded))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Button("取消") { stopRecording() }
                         .font(.system(size: 12))
                         .buttonStyle(.plain)
                         .foregroundColor(.blue)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(Color.red.opacity(0.3), lineWidth: 1)
-                    )
-                } else {
-                    Button(action: startRecording) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 14))
-                            Text("添加快捷键")
-                                .font(.system(size: 12, weight: .medium))
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.blue)
                 }
-
-                Text("支持按键、鼠标右键及组合键，ESC 取消录制")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Color.red.opacity(0.3), lineWidth: 1)
+                )
+            } else {
+                Button(action: startRecording) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus.circle.fill").font(.system(size: 14))
+                        Text("添加快捷键").font(.system(size: 12, weight: .medium))
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.blue)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
 
-            Divider()
-                .padding(.horizontal, 16)
+            Text("支持按键、鼠标右键及组合键，ESC 取消录制")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+    }
 
-            // Preview section
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 6) {
-                    Image(systemName: "eye")
+    // MARK: - Preview Section
+
+    private var previewSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "eye")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                Text("窗口预览")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.primary)
+            }
+
+            Toggle("显示窗口预览", isOn: $settings.showPreview)
+                .font(.system(size: 13))
+
+            if settings.showPreview {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("预览延迟").font(.system(size: 12)).foregroundColor(.secondary)
+                        Spacer()
+                        Text(String(format: "%.1f 秒", settings.previewDelay))
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
+                    Slider(value: $settings.previewDelay, in: 0.1...2.0, step: 0.1)
+                        .controlSize(.small)
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+    }
+
+    // MARK: - Tag Presets Section
+
+    private var tagPresetsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "tag")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                Text("标签预设")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.primary)
+            }
+
+            VStack(spacing: 4) {
+                ForEach(tagManager.presetTags) { tag in
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(tag.color)
+                            .frame(width: 12, height: 12)
+                        Text(tag.name)
+                            .font(.system(size: 13))
+                        Spacer()
+                        Button {
+                            withAnimation(.easeOut(duration: 0.2)) { tagManager.removePresetTag(tag) }
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(.red.opacity(0.7))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                }
+            }
+            .padding(8)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+            )
+
+            if isAddingTag {
+                HStack(spacing: 8) {
+                    Menu {
+                        ForEach(AppTag.availableColors, id: \.self) { colorName in
+                            Button {
+                                newTagColor = colorName
+                            } label: {
+                                Text("\(AppTag.emojiFor(colorName)) \(AppTag.displayNameFor(colorName))")
+                            }
+                        }
+                    } label: {
+                        Circle()
+                            .fill(AppTag.colorFor(newTagColor))
+                            .frame(width: 16, height: 16)
+                            .overlay(Circle().strokeBorder(.primary.opacity(0.2), lineWidth: 0.5))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .frame(width: 30)
+
+                    TextField("标签名称", text: $newTagName)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 12))
+
+                    Button("添加") {
+                        guard !newTagName.isEmpty else { return }
+                        tagManager.addPresetTag(AppTag(name: newTagName, colorName: newTagColor))
+                        newTagName = ""
+                        isAddingTag = false
+                    }
+                    .font(.system(size: 12))
+                    .disabled(newTagName.isEmpty)
+
+                    Button("取消") {
+                        isAddingTag = false
+                        newTagName = ""
+                    }
+                    .font(.system(size: 12))
+                }
+            } else {
+                Button { isAddingTag = true } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus.circle.fill").font(.system(size: 14))
+                        Text("添加标签").font(.system(size: 12, weight: .medium))
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.blue)
+            }
+
+            Text("在应用上右键可快速标记")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+    }
+
+    // MARK: - Quick Launch Section
+
+    private var quickLaunchSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                Text("快捷唤起")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.primary)
+            }
+
+            VStack(spacing: 4) {
+                let boundSlots = (1...9).filter { quickLaunch.bindings[$0] != nil }
+                if boundSlots.isEmpty {
+                    Text("暂无绑定")
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
-                    Text("窗口预览")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.primary)
-                }
-
-                Toggle("显示窗口预览", isOn: $settings.showPreview)
-                    .font(.system(size: 13))
-
-                if settings.showPreview {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("预览延迟")
-                                .font(.system(size: 12))
-                                .foregroundColor(.secondary)
-                            Spacer()
-                            Text(String(format: "%.1f 秒", settings.previewDelay))
-                                .font(.system(size: 12, design: .monospaced))
-                                .foregroundColor(.secondary)
+                        .padding(8)
+                } else {
+                    ForEach(boundSlots, id: \.self) { slot in
+                        if let binding = quickLaunch.bindings[slot] {
+                            HStack(spacing: 8) {
+                                Text("⌥\(slot)")
+                                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                    .frame(width: 30, alignment: .leading)
+                                Image(systemName: "arrow.right")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                                Text(binding.displayName)
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.primary)
+                                if let wn = binding.windowName {
+                                    Text("· \(wn)")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                                Button {
+                                    withAnimation(.easeOut(duration: 0.2)) { quickLaunch.unbind(slot: slot) }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
                         }
-                        Slider(value: $settings.previewDelay, in: 0.1...2.0, step: 0.1)
-                            .controlSize(.small)
                     }
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
+            .padding(8)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+            )
 
-            Spacer()
+            Text("在应用上右键绑定 ⌥+数字 快捷键，应用关闭后快捷键自动失效")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
         }
-        .frame(width: 360, height: 440)
-        .onDisappear {
-            stopRecording()
-        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
     }
+
+    // MARK: - Recording Helpers
 
     private func modifierParts(from modFlags: NSEvent.ModifierFlags) -> [String] {
         var parts: [String] = []
@@ -187,7 +358,6 @@ struct SettingsView: View {
         recordingDisplay = ""
         onStartRecording?()
 
-        // Keyboard monitor
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
             if event.type == .keyDown {
                 let keyCode = Int(event.keyCode)
@@ -196,11 +366,7 @@ struct SettingsView: View {
                     || modFlags.contains(.control) || modFlags.contains(.shift)
                     || modFlags.contains(.function)
 
-                // ESC without modifiers cancels
-                if keyCode == 53 && !hasModifier {
-                    stopRecording()
-                    return nil
-                }
+                if keyCode == 53 && !hasModifier { stopRecording(); return nil }
 
                 let combo = HotKeyCombination(keyCode: keyCode, modifiers: cgFlags(from: modFlags))
                 settings.addHotKey(combo)
@@ -216,14 +382,10 @@ struct SettingsView: View {
             return nil
         }
 
-        // Mouse monitor (right click)
         mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown]) { event in
             let modFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            let parts = modifierParts(from: modFlags)
             let combo = HotKeyCombination(
-                keyCode: -1,
-                modifiers: cgFlags(from: modFlags),
-                mouseButton: 2
+                keyCode: -1, modifiers: cgFlags(from: modFlags), mouseButton: 2
             )
             settings.addHotKey(combo)
             stopRecording()

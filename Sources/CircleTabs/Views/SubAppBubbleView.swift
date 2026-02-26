@@ -6,6 +6,8 @@ struct SubAppBubbleView: View {
     let isHovered: Bool
     let showLabel: Bool
     let isInCloseMode: Bool
+    var tags: [AppTag] = []
+    var quickSlot: Int? = nil
 
     private let size: CGFloat = CircularLayoutEngine.subBubbleRadius * 2
 
@@ -44,6 +46,35 @@ struct SubAppBubbleView: View {
         .frame(width: size, height: size)
         .opacity(window.isMinimized ? 0.6 : 1.0)
         .scaleEffect(isHovered ? 1.2 : 1.0)
+        // Tag dots
+        .overlay(alignment: .bottom) {
+            if !tags.isEmpty && !isInCloseMode {
+                HStack(spacing: 2) {
+                    ForEach(tags.prefix(3)) { tag in
+                        Circle()
+                            .fill(tag.color)
+                            .frame(width: 6, height: 6)
+                            .shadow(color: tag.color.opacity(0.6), radius: 1.5)
+                    }
+                }
+                .offset(y: -2)
+            }
+        }
+        // Quick launch slot badge
+        .overlay(alignment: .topTrailing) {
+            if let slot = quickSlot, !isInCloseMode {
+                Text("\(slot)")
+                    .font(.system(size: 9, weight: .heavy, design: .rounded))
+                    .foregroundColor(.white)
+                    .frame(width: 16, height: 16)
+                    .background(
+                        Circle()
+                            .fill(Color.blue.opacity(0.9))
+                            .shadow(color: .black.opacity(0.3), radius: 2)
+                    )
+                    .offset(x: 3, y: -3)
+            }
+        }
         // Close badge — outside the scaled frame
         .overlay(alignment: .topLeading) {
             if isInCloseMode {
