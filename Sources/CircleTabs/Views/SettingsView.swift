@@ -118,9 +118,45 @@ struct SettingsView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
 
+            Divider()
+                .padding(.horizontal, 16)
+
+            // Preview section
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 6) {
+                    Image(systemName: "eye")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    Text("窗口预览")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.primary)
+                }
+
+                Toggle("显示窗口预览", isOn: $settings.showPreview)
+                    .font(.system(size: 13))
+
+                if settings.showPreview {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("预览延迟")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text(String(format: "%.1f 秒", settings.previewDelay))
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(.secondary)
+                        }
+                        Slider(value: $settings.previewDelay, in: 0.1...2.0, step: 0.1)
+                            .controlSize(.small)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+
             Spacer()
         }
-        .frame(width: 360, height: 340)
+        .frame(width: 360, height: 440)
         .onDisappear {
             stopRecording()
         }

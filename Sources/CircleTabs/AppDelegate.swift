@@ -1,5 +1,6 @@
 import Cocoa
 import SwiftUI
+import ScreenCaptureKit
 
 extension Notification.Name {
     static let escapePressed = Notification.Name("CircleTabsEscapePressed")
@@ -18,8 +19,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupStatusBar()
         setupEscapeMonitor()
 
-        if HotKeyManager.hasAccessibilityPermission {
+        let hasAX = HotKeyManager.hasAccessibilityPermission
+
+        // CGPreflightScreenCaptureAccess() doesn't detect temporary access on macOS 15.
+        // Check permanent access first; if not, try ScreenCaptureKit (detects temporary access).
+        if hasAX && CGPreflightScreenCaptureAccess() {
             startApp()
+            return
+        }
+
+        if hasAX {
+            // AX is fine, check screen recording via ScreenCaptureKit
+            SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { [weak self] content, _ in
+                DispatchQueue.main.async {
+                    if content != nil {
+                        self?.startApp()
+                    } else {
+                        self?.showPermissionGuide()
+                    }
+                }
+            }
         } else {
             resetAccessibilityTCC()
             showPermissionGuide()
@@ -35,8 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Permission Guide
 
     private func showPermissionGuide() {
-        HotKeyManager.requestAccessibilityPermission()
-
+        // Don't trigger system dialogs here — PermissionGuideView handles it on button click
         let guideView = PermissionGuideView {
             DispatchQueue.main.async { [weak self] in
                 self?.startApp()
@@ -44,7 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 320),
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 360),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -119,7 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 340),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 440),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false

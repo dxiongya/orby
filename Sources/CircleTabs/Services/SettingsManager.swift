@@ -70,8 +70,16 @@ final class SettingsManager: ObservableObject {
     private let storageKey = "hotKeyCombinations"
 
     @Published var hotKeys: [HotKeyCombination] = []
+    @Published var showPreview: Bool = true {
+        didSet { UserDefaults.standard.set(showPreview, forKey: "showPreview") }
+    }
+    @Published var previewDelay: Double = 0.45 {
+        didSet { UserDefaults.standard.set(previewDelay, forKey: "previewDelay") }
+    }
 
     private init() {
+        showPreview = UserDefaults.standard.object(forKey: "showPreview") as? Bool ?? true
+        previewDelay = UserDefaults.standard.object(forKey: "previewDelay") as? Double ?? 0.45
         loadHotKeys()
     }
 

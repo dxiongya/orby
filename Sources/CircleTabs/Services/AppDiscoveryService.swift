@@ -1,11 +1,16 @@
 import Cocoa
 import ApplicationServices
+import ScreenCaptureKit
 
 final class AppDiscoveryService {
     static let shared = AppDiscoveryService()
     private init() {}
 
     private static let minWindowSize: CGFloat = 100
+
+    /// Cached ScreenCaptureKit window titles (CGWindowID → title)
+    /// Refreshed each time getRunningApps() is called.
+    private var scWindowTitles: [CGWindowID: String] = [:]
 
     // MARK: - Public
 
@@ -17,6 +22,9 @@ final class AppDiscoveryService {
         // Pre-fetch CG windows grouped by PID (for cross-referencing names & IDs)
         let cgByPid = getCGWindowsByPid()
 
+        // Pre-fetch ScreenCaptureKit window titles (works with temporary access on macOS 15)
+        refreshSCWindowTitles()
+
         // Deduplicate by bundleIdentifier — merge windows from multiple processes
         var seen: [String: Int] = [:]
         var appItems: [AppItem] = []
@@ -25,8 +33,9 @@ final class AppDiscoveryService {
             guard let bundleId = app.bundleIdentifier else { continue }
 
             let pid = app.processIdentifier
+            let appName = app.localizedName ?? ""
             let cgEntries = cgByPid[pid] ?? []
-            let windows = discoverWindows(pid: pid, cgEntries: cgEntries)
+            let windows = discoverWindows(pid: pid, appName: appName, cgEntries: cgEntries)
 
             if let existingIdx = seen[bundleId] {
                 // Same app, different process — merge windows
@@ -58,19 +67,22 @@ final class AppDiscoveryService {
         let bounds: CGRect
     }
 
-    private func discoverWindows(pid: pid_t, cgEntries: [CGEntry]) -> [WindowItem] {
+    private func discoverWindows(pid: pid_t, appName: String = "", cgEntries: [CGEntry]) -> [WindowItem] {
         let appElement = AXUIElementCreateApplication(pid)
         var windowsRef: CFTypeRef?
         let err = AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowsRef)
         guard err == .success, let axWindows = windowsRef as? [AXUIElement] else {
             // Fallback: use CG windows directly
-            return cgEntries.map { cg in
+            return cgEntries.enumerated().map { (i, cg) in
                 WindowItem(id: Int(cg.windowID), name: cg.name, ownerPid: pid,
                            windowNumber: Int(cg.windowID), cgWindowID: cg.windowID)
             }
         }
 
+        // Track matched CG IDs to avoid two AX windows matching the same CG window
+        var matchedCGIDs: Set<CGWindowID> = []
         var items: [WindowItem] = []
+
         for (i, axWindow) in axWindows.enumerated() {
             // Filter: role
             var roleRef: CFTypeRef?
@@ -101,34 +113,76 @@ final class AppDiscoveryService {
             AXUIElementCopyAttributeValue(axWindow, kAXTitleAttribute as CFString, &titleRef)
             let axTitle = (titleRef as? String) ?? ""
 
+            // Try kAXDocument for file-based apps
+            var docRef: CFTypeRef?
+            AXUIElementCopyAttributeValue(axWindow, kAXDocumentAttribute as CFString, &docRef)
+            let docPath = docRef as? String
+
             // Get AX position for CG matching
             var posRef: CFTypeRef?
             AXUIElementCopyAttributeValue(axWindow, kAXPositionAttribute as CFString, &posRef)
             var axPos = CGPoint.zero
             if let pv = posRef { AXValueGetValue(pv as! AXValue, .cgPoint, &axPos) }
 
-            // Cross-reference with CG window to get CGWindowID and fallback name
-            let matched = matchCGWindow(axPos: axPos, axSize: axSize, axTitle: axTitle, cgEntries: cgEntries)
+            // Cross-reference with CG window (excluding already-matched IDs)
+            let available = cgEntries.filter { !matchedCGIDs.contains($0.windowID) }
+            let matched = matchCGWindow(axPos: axPos, axSize: axSize, axTitle: axTitle, cgEntries: available)
+            if let m = matched { matchedCGIDs.insert(m.windowID) }
+
+            // Build window name with smart priority:
+            // - AX title is usually best (e.g. Chrome shows profile name "大雄 (大雄呀)")
+            // - But Electron apps often return just the app name (e.g. "Pencil")
+            //   → in that case, SC/CG names give the real title ("doc.pen — Edited")
+            let cgID = matched?.windowID ?? 0
+            let cgName = matched?.name ?? ""
+            let scName = cgID > 0 ? (scWindowTitles[cgID] ?? "") : ""
+            let axTitleIsGeneric = axTitle.isEmpty || axTitle == appName
+
             let finalName: String
-            if !axTitle.isEmpty {
+            if !axTitle.isEmpty && !axTitleIsGeneric {
+                // AX title is specific (e.g. Chrome profile) — use it
                 finalName = axTitle
-            } else if let m = matched, !m.name.isEmpty {
-                finalName = m.name
+            } else if !cgName.isEmpty {
+                finalName = cgName
+            } else if !scName.isEmpty {
+                finalName = scName
+            } else if !axTitle.isEmpty {
+                // Generic AX title (same as app name) — still better than nothing
+                finalName = axTitle
+            } else if let doc = docPath, let url = URL(string: doc) {
+                finalName = url.lastPathComponent
             } else {
                 finalName = ""
             }
-            let cgID = matched?.windowID ?? 0
-            NSLog("[CircleTabs] AX win[%d]: title='%@' cgMatch=%@ cgName='%@' final='%@'",
-                  i, axTitle, matched != nil ? "Y(id=\(cgID))" : "N",
-                  matched?.name ?? "-", finalName)
+
+            // Always generate unique ID: use CG window ID if available, otherwise synthetic
+            let uniqueID = Int(cgID != 0 ? cgID : UInt32(pid) &* 1000 &+ UInt32(i))
+
+            NSLog("[CircleTabs] AX win[%d]: axTitle='%@' cgName='%@' scName='%@' final='%@' cgID=%d",
+                  i, axTitle, cgName, scName, finalName, cgID)
 
             items.append(WindowItem(
-                id: Int(cgID != 0 ? cgID : UInt32(pid) * 1000 + UInt32(i)),
+                id: uniqueID,
                 name: finalName,
                 ownerPid: pid,
-                windowNumber: Int(cgID != 0 ? cgID : UInt32(pid) * 1000 + UInt32(i)),
+                windowNumber: uniqueID,
                 cgWindowID: cgID
             ))
+        }
+
+        // Disambiguate same-name windows (e.g. "Pencil", "Pencil" → "Pencil (1)", "Pencil (2)")
+        var nameCounts: [String: Int] = [:]
+        for item in items { nameCounts[item.name, default: 0] += 1 }
+        var nameCounters: [String: Int] = [:]
+        for i in items.indices {
+            let name = items[i].name
+            if (nameCounts[name] ?? 0) > 1 {
+                let idx = (nameCounters[name] ?? 0) + 1
+                nameCounters[name] = idx
+                items[i].name = name.isEmpty ? "Window \(idx)" : "\(name) (\(idx))"
+            } else if name.isEmpty {
+                items[i].name = "Window"
+            }
         }
 
         NSLog("[CircleTabs] AX pid=%d valid=%d/%d titles=[%@]",
@@ -155,6 +209,31 @@ final class AppDiscoveryService {
             }
         }
         return nil
+    }
+
+    // MARK: - ScreenCaptureKit Window Titles
+
+    private func refreshSCWindowTitles() {
+        scWindowTitles = [:]
+        // Run on background queue to avoid main-thread deadlock
+        let group = DispatchGroup()
+        group.enter()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: true) { content, _ in
+                if let windows = content?.windows {
+                    var titles: [CGWindowID: String] = [:]
+                    for w in windows {
+                        if let title = w.title, !title.isEmpty {
+                            titles[w.windowID] = title
+                        }
+                    }
+                    self?.scWindowTitles = titles
+                }
+                group.leave()
+            }
+        }
+        // Wait briefly — ScreenCaptureKit is fast when permission is already granted
+        _ = group.wait(timeout: .now() + 0.5)
     }
 
     // MARK: - CG Window List

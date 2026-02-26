@@ -12,6 +12,33 @@ enum CloseMode: Equatable {
     case subApps
 }
 
+/// Monitors Option key press/release via local event monitor
+private class OptionKeyState: ObservableObject {
+    @Published var isHeld = false
+    private var monitor: Any?
+
+    func startMonitoring() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            let option = event.modifierFlags.contains(.option)
+            if self?.isHeld != option {
+                DispatchQueue.main.async {
+                    withAnimation(.easeOut(duration: 0.12)) {
+                        self?.isHeld = option
+                    }
+                }
+            }
+            return event
+        }
+    }
+
+    func stopMonitoring() {
+        if let m = monitor { NSEvent.removeMonitor(m) }
+        monitor = nil
+        isHeld = false
+    }
+}
+
 struct CircleTabsView: View {
     @Binding var isVisible: Bool
 
@@ -28,6 +55,7 @@ struct CircleTabsView: View {
     @State private var previewPosition: CGPoint = .zero
     @State private var hoverTimer: DispatchWorkItem?
     @State private var previewForWindowId: Int = -1
+    @State private var previewFrame: CGRect = .zero
     @State private var subAppStaggerFlags: [Bool] = []
     @State private var isHoveringPreview = false
     @State private var previewTitle: String = ""
@@ -40,6 +68,9 @@ struct CircleTabsView: View {
     @State private var longPressStartPos: CGPoint?
     @State private var longPressTriggered = false
     @State private var isDragging = false
+
+    // Option key state for showing all sub-app labels
+    @StateObject private var optionKey = OptionKeyState()
 
     var body: some View {
         GeometryReader { geo in
@@ -252,6 +283,7 @@ struct CircleTabsView: View {
         let cursorPos = CGPoint(x: rawX, y: rawY)
         mousePos = cursorPos
         loadApps(around: cursorPos)
+        optionKey.startMonitoring()
         withAnimation(jellySpring) { appeared = true }
         animateStaggeredEntrance()
     }
@@ -353,7 +385,7 @@ struct CircleTabsView: View {
                         window: apps[idx].windows[wIdx],
                         parentIcon: apps[idx].icon,
                         isHovered: hoveredSubAppIndex == wIdx,
-                        showLabel: hoveredSubAppIndex == wIdx,
+                        showLabel: hoveredSubAppIndex == wIdx || optionKey.isHeld,
                         isInCloseMode: closeMode == .subApps
                     )
                     .zIndex(hoveredSubAppIndex == wIdx ? 100 : 0)
@@ -545,9 +577,10 @@ struct CircleTabsView: View {
             return
         }
 
-        // STEP 5: clear sub hover
+        // STEP 5: clear sub hover (but keep preview if mouse is over it)
         if expandedAppIndex != nil {
-            if isHoveringPreview { return }
+            let overPreview = isHoveringPreview || isMouseOverPreview(loc)
+            if overPreview { return }
             withAnimation(quickSpring) { hoveredSubAppIndex = nil }
             clearPreviewNow()
         }
@@ -558,7 +591,8 @@ struct CircleTabsView: View {
             if let idx = expandedAppIndex, idx < apps.count {
                 inSub = CircularLayoutEngine.findClosestSubApp(to: loc, in: apps[idx].windows, threshold: CircularLayoutEngine.subBubbleRadius + 35) != nil
             } else { inSub = false }
-            if !inSub && !isHoveringPreview {
+            let overPreview = isHoveringPreview || isMouseOverPreview(loc)
+            if !inSub && !overPreview {
                 let dx = loc.x - center.x, dy = loc.y - center.y
                 if sqrt(dx*dx + dy*dy) < CircularLayoutEngine.ring1Radius * 0.3 {
                     collapseSubApps()
@@ -615,9 +649,11 @@ struct CircleTabsView: View {
     }
 
     private func schedulePreview(for appIdx: Int, windowIndex wIdx: Int, windowId: Int) {
+        guard SettingsManager.shared.showPreview else { return }
         hoverTimer?.cancel()
         previewForWindowId = windowId
 
+        let delay = SettingsManager.shared.previewDelay
         let work = DispatchWorkItem { [self] in
             guard appIdx < apps.count, wIdx < apps[appIdx].windows.count else { return }
             let win = apps[appIdx].windows[wIdx]
@@ -627,21 +663,103 @@ struct CircleTabsView: View {
                     previewImage = img
                     previewTitle = win.name.isEmpty ? "Window" : win.name
 
-                    let dx = win.position.x - center.x
-                    let dy = win.position.y - center.y
-                    let dist = sqrt(dx * dx + dy * dy)
-                    let normX = dist > 0 ? dx / dist : 0
-                    let normY = dist > 0 ? dy / dist : 1
-                    let offset = img.size.height / 2 + CircularLayoutEngine.subBubbleRadius + 50
-                    previewPosition = CGPoint(
-                        x: win.position.x + normX * offset,
-                        y: win.position.y + normY * offset
+                    let cardW = max(img.size.width, 160) + 12
+                    let cardH = img.size.height + 40
+                    let pos = findBestPreviewPosition(
+                        anchor: win.position, cardSize: CGSize(width: cardW, height: cardH),
+                        expandedIdx: appIdx
+                    )
+                    previewPosition = pos
+                    previewFrame = CGRect(
+                        x: pos.x - cardW / 2, y: pos.y - cardH / 2,
+                        width: cardW, height: cardH
                     )
                 }
             }
         }
         hoverTimer = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    /// Find the best position for the preview card that avoids overlapping bubbles.
+    private func findBestPreviewPosition(anchor: CGPoint, cardSize: CGSize, expandedIdx: Int) -> CGPoint {
+        let halfW = cardSize.width / 2
+        let halfH = cardSize.height / 2
+        let margin: CGFloat = 8
+        let gap: CGFloat = CircularLayoutEngine.subBubbleRadius + 30
+
+        // Collect all bubble positions & radii to avoid
+        var obstacles: [(CGPoint, CGFloat)] = []
+        // Center close button
+        obstacles.append((center, 22))
+        // Main app bubbles
+        let mainR = CircularLayoutEngine.mainBubbleRadius
+        for (i, app) in apps.enumerated() {
+            let off = offset(for: i)
+            obstacles.append((
+                CGPoint(x: app.position.x + off.x, y: app.position.y + off.y),
+                mainR * app.bubbleScale
+            ))
+        }
+        // Sub-app bubbles
+        if expandedIdx < apps.count {
+            let subR = CircularLayoutEngine.subBubbleRadius
+            for w in apps[expandedIdx].windows {
+                obstacles.append((w.position, subR))
+            }
+        }
+
+        // Try 12 directions around the anchor, pick the one with least overlap
+        let angles: [Double] = (0..<12).map { Double($0) * (.pi * 2 / 12) }
+        // Also try the outward direction from center as first candidate
+        let outDx = anchor.x - center.x
+        let outDy = anchor.y - center.y
+        let outAngle = atan2(outDy, outDx)
+
+        var bestPos = CGPoint.zero
+        var bestScore = Double.infinity
+
+        for angle in [outAngle] + angles {
+            let dist = max(halfH, halfW) + gap
+            var px = anchor.x + cos(angle) * dist
+            var py = anchor.y + sin(angle) * dist
+
+            // Clamp to safe bounds
+            let minX = safeBounds.minX + halfW + margin
+            let maxX = safeBounds.maxX - halfW - margin
+            let minY = safeBounds.minY + halfH + margin
+            let maxY = safeBounds.maxY - halfH - margin
+            px = min(max(px, minX), maxX)
+            py = min(max(py, minY), maxY)
+
+            let cardRect = CGRect(x: px - halfW, y: py - halfH,
+                                  width: cardSize.width, height: cardSize.height)
+
+            // Score: sum of overlap with each obstacle
+            var score: Double = 0
+            for (obPos, obR) in obstacles {
+                let obRect = CGRect(x: obPos.x - obR, y: obPos.y - obR,
+                                    width: obR * 2, height: obR * 2)
+                let intersection = cardRect.intersection(obRect)
+                if !intersection.isNull {
+                    score += Double(intersection.width * intersection.height)
+                }
+            }
+
+            if score < bestScore {
+                bestScore = score
+                bestPos = CGPoint(x: px, y: py)
+                if score == 0 { break } // Perfect — no overlap at all
+            }
+        }
+
+        return bestPos
+    }
+
+    private func isMouseOverPreview(_ loc: CGPoint) -> Bool {
+        guard previewImage != nil else { return false }
+        // Add 20px margin to make it easier to reach
+        return previewFrame.insetBy(dx: -20, dy: -20).contains(loc)
     }
 
     private func clearPreviewNow() {
@@ -651,6 +769,7 @@ struct CircleTabsView: View {
         previewImage = nil
         previewTitle = ""
         isHoveringPreview = false
+        previewFrame = .zero
     }
 
     private func closePreviewWindow() {
@@ -720,6 +839,7 @@ struct CircleTabsView: View {
         switchWorkItem = nil
         cancelLongPress()
         clearPreviewNow()
+        optionKey.stopMonitoring()
         closeMode = .none
         withAnimation(.easeOut(duration: 0.18)) { appeared = false }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { isVisible = false }

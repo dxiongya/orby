@@ -26,7 +26,7 @@ struct AppItem: Identifiable, Equatable {
 
 struct WindowItem: Identifiable, Equatable {
     let id: Int
-    let name: String
+    var name: String
     let ownerPid: pid_t
     let windowNumber: Int
     var cgWindowID: CGWindowID = 0  // real CG window ID for preview capture
