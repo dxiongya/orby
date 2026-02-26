@@ -45,8 +45,7 @@ struct SubAppBubbleView: View {
         }
         .frame(width: size, height: size)
         .opacity(window.isMinimized ? 0.6 : 1.0)
-        .scaleEffect(isHovered ? 1.2 : 1.0)
-        // Tag labels
+        // Tag labels — inside the scale so they follow the bubble
         .overlay(alignment: .bottom) {
             if !tags.isEmpty && !isInCloseMode {
                 HStack(spacing: 2) {
@@ -80,6 +79,7 @@ struct SubAppBubbleView: View {
                 .offset(y: -2)
             }
         }
+        .scaleEffect(isHovered ? 1.2 : 1.0)
         // Quick launch slot badge
         .overlay(alignment: .topTrailing) {
             if let slot = quickSlot, !isInCloseMode {
@@ -142,8 +142,7 @@ struct SubAppBubbleView: View {
         .animation(.spring(response: 0.2, dampingFraction: 0.6), value: isHovered)
     }
 
-    private var displayName: String {
-        let title = window.name
+    static func displayName(for title: String) -> String {
         guard !title.isEmpty else { return "Window" }
 
         for sep in [" — ", "—", " \u{2013} ", "\u{2013}"] {
@@ -159,5 +158,9 @@ struct SubAppBubbleView: View {
         }
 
         return title
+    }
+
+    private var displayName: String {
+        Self.displayName(for: window.name)
     }
 }

@@ -68,8 +68,7 @@ struct AppBubbleView: View {
                     .frame(width: size * 0.68, height: size * 0.68)
             }
             .frame(width: size, height: size)
-            .scaleEffect(isHovered ? 1.18 : 1.0)
-            // Tag labels
+            // Tag labels — inside the scale so they follow the bubble
             .overlay(alignment: .bottom) {
                 if !tags.isEmpty && !isInCloseMode {
                     HStack(spacing: 3) {
@@ -103,6 +102,7 @@ struct AppBubbleView: View {
                     .offset(y: -3)
                 }
             }
+            .scaleEffect(isHovered ? 1.18 : 1.0)
             // Quick launch slot badge
             .overlay(alignment: .topTrailing) {
                 if let slot = quickSlot, !isInCloseMode {

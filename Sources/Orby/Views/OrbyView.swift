@@ -161,8 +161,8 @@ struct OrbyView: View {
                     subAppConnectionLines()
                     mainAppBubbles()
                     subAppBubbles()
+                    subAppLabels()
                     windowPreview()
-                    inlineTagInput()
                     closeModeHint()
                     closeButton()
                 }
@@ -179,11 +179,13 @@ struct OrbyView: View {
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
+                    if inlineTagKey != nil && isClickOnInlineTag(value.location) { return }
                     handleMouseMove(value.location)
                     if !isDragging {
                         isDragging = true
                         longPressStartPos = value.location
-                        if closeMode == .none {
+                        // Don't start long press if mouse is over the preview card
+                        if closeMode == .none && !isMouseOverPreview(value.location) {
                             startLongPressDetection(at: value.location)
                         }
                     } else if let start = longPressStartPos {
@@ -203,6 +205,9 @@ struct OrbyView: View {
                         return
                     }
 
+                    // If clicking on the inline tag input, don't process as a regular click
+                    if inlineTagKey != nil && isClickOnInlineTag(value.location) { return }
+
                     if closeMode != .none {
                         handleCloseModeTap(at: value.location)
                     } else {
@@ -210,6 +215,11 @@ struct OrbyView: View {
                     }
                 }
         )
+        .overlay {
+            if center.x >= 0 && appeared {
+                inlineTagInput()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .escapePressed)) { _ in
             if inlineTagKey != nil {
                 dismissInlineTag()
@@ -247,7 +257,7 @@ struct OrbyView: View {
             }
         }
         longPressWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
     }
 
     private func cancelLongPress() {
@@ -380,8 +390,8 @@ struct OrbyView: View {
         let bubbleR = CircularLayoutEngine.mainBubbleRadius
         inlineTagPosition = CGPoint(x: pos.x, y: pos.y + bubbleR + 28)
 
-        // Delay focus to next run loop so the view appears first
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+        // Delay focus so the overlay view appears first, then grab focus
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             inlineTagFocused = true
         }
     }
@@ -562,7 +572,7 @@ struct OrbyView: View {
                         window: apps[idx].windows[wIdx],
                         parentIcon: apps[idx].icon,
                         isHovered: hoveredSubAppIndex == wIdx,
-                        showLabel: hoveredSubAppIndex == wIdx || optionKey.isHeld,
+                        showLabel: false,
                         isInCloseMode: closeMode == .subApps,
                         tags: tagManager.tags(for: TagManager.key(for: apps[idx].id, windowName: apps[idx].windows[wIdx].name)),
                         quickSlot: {
@@ -584,6 +594,46 @@ struct OrbyView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Sub-App Labels (rendered above all bubbles)
+
+    /// Separate label layer so tooltip text floats above all sub-app icons.
+    private func subAppLabels() -> some View {
+        Group {
+            if let idx = expandedAppIndex, idx < apps.count,
+               hoveredSubAppIndex != nil || optionKey.isHeld {
+                ForEach(apps[idx].windows.indices, id: \.self) { wIdx in
+                    let show = hoveredSubAppIndex == wIdx || (optionKey.isHeld && closeMode == .none)
+                    let vis = subAppStaggerFlags.indices.contains(wIdx) ? subAppStaggerFlags[wIdx] : false
+                    if show && vis {
+                        let win = apps[idx].windows[wIdx]
+                        let label = SubAppBubbleView.displayName(for: win.name)
+                        Text(label)
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.95))
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule()
+                                    .fill(Color.black.opacity(0.7))
+                                    .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                            )
+                            .position(
+                                x: win.position.x,
+                                y: win.position.y + CircularLayoutEngine.subBubbleRadius + 14
+                            )
+                            .allowsHitTesting(false)
+                            .transition(.scale(scale: 0.6).combined(with: .opacity))
+                    }
+                }
+            }
+        }
+        .zIndex(200)
+        .animation(.spring(response: 0.3, dampingFraction: 0.55), value: hoveredSubAppIndex)
+        .animation(.spring(response: 0.3, dampingFraction: 0.55), value: optionKey.isHeld)
     }
 
     // MARK: - Window Preview (DockDoor style card)
@@ -670,7 +720,9 @@ struct OrbyView: View {
                 )
                 .scaleEffect(isHoveringPreview && !isZoomed ? 1.06 : 1.0)
                 .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isHoveringPreview)
-                .position(x: previewPosition.x, y: previewPosition.y)
+                // contentShape + interactions BEFORE .position() so hit-testing
+                // matches the actual card area, not the entire parent frame.
+                .contentShape(RoundedRectangle(cornerRadius: 10))
                 .onContinuousHover { phase in
                     if case .active = phase {
                         if !isHoveringPreview {
@@ -704,6 +756,7 @@ struct OrbyView: View {
                         dismiss()
                     }
                 }
+                .position(x: previewPosition.x, y: previewPosition.y)
                 .transition(.scale(scale: 0.7).combined(with: .opacity))
             }
         }
@@ -719,7 +772,7 @@ struct OrbyView: View {
             withAnimation(quickSpring) { clearPreviewNow() }
         }
         previewDismissWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
 
     private func cancelPreviewDismiss() {
@@ -761,6 +814,9 @@ struct OrbyView: View {
 
     private func handleMouseMove(_ loc: CGPoint) {
         mousePos = loc
+
+        // Freeze all hover logic while inline tag input is active
+        if inlineTagKey != nil { return }
 
         // In close mode, simplified hover tracking
         if closeMode == .mainApps {
@@ -839,33 +895,16 @@ struct OrbyView: View {
             return
         }
 
-        // STEP 5: clear sub hover (but keep preview if mouse is over it)
+        // STEP 5: clear sub hover (keep preview if mouse is on the preview card)
         if expandedAppIndex != nil {
-            let overPreview = isHoveringPreview || isMouseOverPreview(loc)
-            if overPreview { return }
+            if isHoveringPreview || isMouseOverPreview(loc) { return }
             withAnimation(quickSpring) { hoveredSubAppIndex = nil }
-            schedulePreviewDismiss()
+            if previewImage != nil { schedulePreviewDismiss() }
         }
 
         // STEP 5b: clear single-window preview when hovering nothing
         if expandedAppIndex == nil && previewImage != nil && appIdx == nil {
-            let overPreview = isHoveringPreview || isMouseOverPreview(loc)
-            if !overPreview { schedulePreviewDismiss() }
-        }
-
-        // STEP 6: collapse near center
-        if expandedAppIndex != nil, appIdx == nil {
-            let inSub: Bool
-            if let idx = expandedAppIndex, idx < apps.count {
-                inSub = CircularLayoutEngine.findClosestSubApp(to: loc, in: apps[idx].windows, threshold: CircularLayoutEngine.subBubbleRadius + 35) != nil
-            } else { inSub = false }
-            let overPreview = isHoveringPreview || isMouseOverPreview(loc)
-            if !inSub && !overPreview {
-                let dx = loc.x - center.x, dy = loc.y - center.y
-                if sqrt(dx*dx + dy*dy) < CircularLayoutEngine.ring1Radius * 0.3 {
-                    collapseSubApps()
-                }
-            }
+            if !isHoveringPreview && !isMouseOverPreview(loc) { schedulePreviewDismiss() }
         }
     }
 
@@ -1031,8 +1070,7 @@ struct OrbyView: View {
 
     private func isMouseOverPreview(_ loc: CGPoint) -> Bool {
         guard previewImage != nil else { return false }
-        // Add 20px margin to make it easier to reach
-        return previewFrame.insetBy(dx: -20, dy: -20).contains(loc)
+        return previewFrame.insetBy(dx: -8, dy: -8).contains(loc)
     }
 
     private func clearPreviewNow() {
@@ -1064,32 +1102,60 @@ struct OrbyView: View {
         }
     }
 
+    private func isClickOnInlineTag(_ loc: CGPoint) -> Bool {
+        guard inlineTagKey != nil else { return false }
+        let tagRect = CGRect(
+            x: inlineTagPosition.x - 65,
+            y: inlineTagPosition.y - 20,
+            width: 130,
+            height: 40
+        )
+        return tagRect.contains(loc)
+    }
+
     private func handleClick(at loc: CGPoint) {
-        if inlineTagKey != nil { dismissInlineTag(); return }
+        if inlineTagKey != nil {
+            // If clicking on the tag input itself, let it handle focus
+            if isClickOnInlineTag(loc) { return }
+            // Clicking elsewhere dismisses the tag input
+            dismissInlineTag()
+            return
+        }
         let dx = loc.x - center.x, dy = loc.y - center.y
         if sqrt(dx*dx + dy*dy) < 22 { dismiss(); return }
 
         // Click on preview card — let its own tap handler deal with it
         if previewImage != nil && isMouseOverPreview(loc) { return }
 
+        // Click on a sub-app bubble — activate that window
         if let idx = expandedAppIndex, idx < apps.count,
            let sub = CircularLayoutEngine.findClosestSubApp(to: loc, in: apps[idx].windows, threshold: CircularLayoutEngine.subBubbleRadius + 12) {
             AppDiscoveryService.shared.activateWindow(apps[idx].windows[sub]); dismiss(); return
         }
+
+        // Click on a main app bubble
         let clickR = CircularLayoutEngine.effectiveBubbleRadius(for: apps.count)
         if let idx = CircularLayoutEngine.findClosestApp(to: loc, in: apps, offsets: pushOffsets, threshold: clickR + 12) {
             if apps[idx].windows.count <= 1 {
+                // Single window — activate and dismiss
                 if apps[idx].windows.count == 1 {
                     AppDiscoveryService.shared.activateWindow(apps[idx].windows[0])
                 } else {
                     AppDiscoveryService.shared.activateApp(apps[idx])
                 }
                 dismiss()
+            } else if expandedAppIndex == idx {
+                // Clicking the already-expanded app — collapse it
+                collapseSubApps()
+            } else {
+                // Clicking a different multi-window app — switch to it
+                switchExpandedApp(to: idx)
             }
             return
         }
 
         // Clicked empty area — collapse expanded app or dismiss overlay
+        clearPreviewNow()
         if expandedAppIndex != nil {
             collapseSubApps()
         } else {
