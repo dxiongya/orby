@@ -686,6 +686,7 @@ struct OrbyView: View {
                                 zoomState.zoom = 1.0
                             }
                         }
+                        schedulePreviewDismiss()
                     }
                 }
                 .onTapGesture {
@@ -718,7 +719,7 @@ struct OrbyView: View {
             withAnimation(quickSpring) { clearPreviewNow() }
         }
         previewDismissWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }
 
     private func cancelPreviewDismiss() {
@@ -1067,6 +1068,10 @@ struct OrbyView: View {
         if inlineTagKey != nil { dismissInlineTag(); return }
         let dx = loc.x - center.x, dy = loc.y - center.y
         if sqrt(dx*dx + dy*dy) < 22 { dismiss(); return }
+
+        // Click on preview card — let its own tap handler deal with it
+        if previewImage != nil && isMouseOverPreview(loc) { return }
+
         if let idx = expandedAppIndex, idx < apps.count,
            let sub = CircularLayoutEngine.findClosestSubApp(to: loc, in: apps[idx].windows, threshold: CircularLayoutEngine.subBubbleRadius + 12) {
             AppDiscoveryService.shared.activateWindow(apps[idx].windows[sub]); dismiss(); return
@@ -1081,6 +1086,14 @@ struct OrbyView: View {
                 }
                 dismiss()
             }
+            return
+        }
+
+        // Clicked empty area — collapse expanded app or dismiss overlay
+        if expandedAppIndex != nil {
+            collapseSubApps()
+        } else {
+            dismiss()
         }
     }
 

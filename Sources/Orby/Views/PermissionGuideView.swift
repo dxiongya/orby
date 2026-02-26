@@ -6,6 +6,11 @@ struct PermissionGuideView: View {
     @State private var hasAccessibility = AXIsProcessTrusted()
     @State private var hasScreenRecording = CGPreflightScreenCaptureAccess()
     @State private var timer: Timer?
+    @State private var activationObserver: Any?
+    /// Tracks whether the user has clicked "Grant Screen Recording" at least once.
+    /// Only after this do we use SCShareableContent in polling/activation checks,
+    /// to avoid triggering the system dialog unexpectedly.
+    @State private var srGrantAttempted = false
 
     var onAllGranted: () -> Void
 
@@ -93,8 +98,20 @@ struct PermissionGuideView: View {
         }
         .padding(24)
         .frame(width: 400, height: 360)
-        .onAppear { startPolling() }
-        .onDisappear { timer?.invalidate() }
+        .onAppear {
+            if allGranted {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { onAllGranted() }
+            } else {
+                startPolling()
+                observeAppActivation()
+            }
+        }
+        .onDisappear {
+            timer?.invalidate()
+            if let observer = activationObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
+        }
     }
 
     private func permissionRow(name: String, detail: String, icon: String, granted: Bool) -> some View {
@@ -125,21 +142,18 @@ struct PermissionGuideView: View {
     }
 
     private func grantScreenRecording() {
-        // CGRequestScreenCaptureAccess() is unreliable on macOS 15 Sequoia — use ScreenCaptureKit instead.
-        // SCShareableContent triggers the proper system permission dialog on first use.
+        srGrantAttempted = true
         SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { content, error in
             DispatchQueue.main.async {
                 if content != nil {
-                    // Permission granted (temporary or permanent)
+                    UserDefaults.standard.set(true, forKey: "srPreviouslyGranted")
                     withAnimation { hasScreenRecording = true }
-                    // Warm up CGWindowList access so it won't trigger a second prompt later.
-                    // This proactive capture (on a background thread) ensures both SCKit and
-                    // CGWindowList APIs are authorized during the permission setup phase.
+                    checkAllGranted()
+                    // Warm up CGWindowList access on a background thread
                     DispatchQueue.global(qos: .utility).async {
                         _ = CGWindowListCreateImage(.null, .optionOnScreenOnly, kCGNullWindowID, .nominalResolution)
                     }
                 } else {
-                    // Dialog was dismissed / denied — open System Settings as fallback
                     openScreenRecordingSettings()
                 }
             }
@@ -156,28 +170,63 @@ struct PermissionGuideView: View {
         NSWorkspace.shared.selectFile(Bundle.main.bundlePath, inFileViewerRootedAtPath: "")
     }
 
-    // MARK: - Polling (no system dialogs here, just check status)
+    // MARK: - Polling & Activation Observer
+
+    /// Re-check permissions when user switches back from System Settings.
+    private func observeAppActivation() {
+        activationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            recheckPermissions()
+        }
+    }
+
+    private func recheckPermissions() {
+        let ax = AXIsProcessTrusted()
+        if ax != hasAccessibility { withAnimation { hasAccessibility = ax } }
+
+        if !hasScreenRecording {
+            // Fast sync check — detects permanent access reliably
+            if CGPreflightScreenCaptureAccess() {
+                withAnimation { hasScreenRecording = true }
+            } else if srGrantAttempted {
+                // User already interacted with the screen recording dialog.
+                // Use SCShareableContent to detect temporary access (macOS 15 Sequoia).
+                // Safe: won't trigger a new dialog after the initial interaction.
+                SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { content, _ in
+                    DispatchQueue.main.async {
+                        if content != nil {
+                            withAnimation { hasScreenRecording = true }
+                        }
+                        checkAllGranted()
+                    }
+                }
+                return // checkAllGranted will run in the async callback
+            }
+        }
+
+        checkAllGranted()
+    }
+
+    private func checkAllGranted() {
+        if hasAccessibility && hasScreenRecording {
+            timer?.invalidate()
+            timer = nil
+            if let observer = activationObserver {
+                NotificationCenter.default.removeObserver(observer)
+                activationObserver = nil
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                onAllGranted()
+            }
+        }
+    }
 
     private func startPolling() {
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            let ax = AXIsProcessTrusted()
-            if ax != hasAccessibility { withAnimation { hasAccessibility = ax } }
-
-            // Screen recording: only upgrade false → true, never downgrade.
-            // CGPreflightScreenCaptureAccess() doesn't detect temporary access on macOS 15,
-            // but SCShareableContent callback in grantScreenRecording() does.
-            if !hasScreenRecording {
-                let sr = CGPreflightScreenCaptureAccess()
-                if sr { withAnimation { hasScreenRecording = true } }
-            }
-
-            if ax && hasScreenRecording {
-                timer?.invalidate()
-                timer = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                    onAllGranted()
-                }
-            }
+        timer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { _ in
+            recheckPermissions()
         }
     }
 }

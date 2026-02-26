@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var permissionWindow: NSWindow?
     private var settingsWindow: NSWindow?
     private var onboardingWindow: NSWindow?
+    private var permissionMonitorTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusBar()
@@ -22,14 +23,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let hasAX = HotKeyManager.hasAccessibilityPermission
 
-        // CGPreflightScreenCaptureAccess() doesn't detect temporary access on macOS 15.
-        // Check permanent access first; if not, try ScreenCaptureKit (detects temporary access).
+        // Fast path: both permissions confirmed (permanent access)
         if hasAX && CGPreflightScreenCaptureAccess() {
             startApp()
             return
         }
 
-        if hasAX {
+        // Only probe SCShareableContent if user has previously granted screen recording.
+        // On first launch, calling SCShareableContent triggers the system dialog immediately,
+        // which is confusing — the user should see our permission guide first and click
+        // "Grant Screen Recording" to trigger the dialog intentionally.
+        let srPreviouslyGranted = UserDefaults.standard.bool(forKey: "srPreviouslyGranted")
+
+        if hasAX && srPreviouslyGranted {
             SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { [weak self] content, _ in
                 DispatchQueue.main.async {
                     if content != nil {
@@ -40,18 +46,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         } else {
-            resetAccessibilityTCC()
             showPermissionGuide()
         }
     }
 
     private func startApp() {
+        UserDefaults.standard.set(true, forKey: "srPreviouslyGranted")
         setupHotKey()
         QuickLaunchManager.shared.startMonitoring()
         closePermissionGuide()
+        startPermissionMonitor()
 
         if !UserDefaults.standard.bool(forKey: "onboardingCompleted") {
             showOnboarding()
+        }
+    }
+
+    // MARK: - Permission Monitor
+
+    /// Periodically check if accessibility was revoked at runtime.
+    /// Gracefully tear down the event tap and re-show the permission guide.
+    private func startPermissionMonitor() {
+        permissionMonitorTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+            if !HotKeyManager.hasAccessibilityPermission {
+                self?.permissionMonitorTimer?.invalidate()
+                self?.permissionMonitorTimer = nil
+                self?.hotKeyManager.stop()
+                self?.hideOverlay()
+                self?.showPermissionGuide()
+            }
         }
     }
 
@@ -85,6 +108,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Permission Guide
 
     private func showPermissionGuide() {
+        // Avoid opening multiple permission windows
+        if let existing = permissionWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
         let guideView = PermissionGuideView {
             DispatchQueue.main.async { [weak self] in
                 self?.startApp()
@@ -110,16 +140,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func closePermissionGuide() {
         permissionWindow?.close()
         permissionWindow = nil
-    }
-
-    private func resetAccessibilityTCC() {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
-        task.arguments = ["reset", "Accessibility", Bundle.main.bundleIdentifier ?? "com.orby.app"]
-        task.standardOutput = FileHandle.nullDevice
-        task.standardError = FileHandle.nullDevice
-        try? task.run()
-        task.waitUntilExit()
     }
 
     // MARK: - Status Bar
@@ -215,6 +235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleOverlay() {
         if !HotKeyManager.hasAccessibilityPermission {
+            hotKeyManager.stop()
             showPermissionGuide()
             return
         }
@@ -250,16 +271,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openAccessibility() {
-        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     @objc private func quitApp() {
+        permissionMonitorTimer?.invalidate()
         hotKeyManager.stop()
         QuickLaunchManager.shared.stopMonitoring()
         NSApp.terminate(nil)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        permissionMonitorTimer?.invalidate()
         hotKeyManager.stop()
         if let m = escapeMonitor { NSEvent.removeMonitor(m) }
     }

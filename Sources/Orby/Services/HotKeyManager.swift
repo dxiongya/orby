@@ -4,6 +4,7 @@ import Carbon
 final class HotKeyManager {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var installedRunLoop: CFRunLoop?
     var onToggle: (() -> Void)?
 
     /// Set true to pass all events through (during hotkey recording)
@@ -18,18 +19,8 @@ final class HotKeyManager {
         AXIsProcessTrusted()
     }
 
-    private static func dbg(_ msg: String) {
-        let path = "/tmp/orby_debug.txt"
-        let line = "[HotKey \(Date())] \(msg)\n"
-        if let fh = FileHandle(forWritingAtPath: path) {
-            fh.seekToEndOfFile(); fh.write(line.data(using: .utf8)!); fh.closeFile()
-        }
-    }
-
     func start() {
-        let hasPerm = HotKeyManager.hasAccessibilityPermission
-        Self.dbg("start() hasPerm=\(hasPerm)")
-        if !hasPerm {
+        if !HotKeyManager.hasAccessibilityPermission {
             HotKeyManager.requestAccessibilityPermission()
             return
         }
@@ -42,19 +33,35 @@ final class HotKeyManager {
 
     private func setupEventTap() {
         let callback: CGEventTapCallBack = { proxy, type, event, refcon in
-            guard let refcon = refcon else { return Unmanaged.passRetained(event) }
+            guard let refcon = refcon else { return Unmanaged.passUnretained(event) }
             let manager = Unmanaged<HotKeyManager>.fromOpaque(refcon).takeUnretainedValue()
 
-            if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if type == .tapDisabledByTimeout {
+                // Timeout is transient — safe to re-enable
                 if let tap = manager.eventTap {
                     CGEvent.tapEnable(tap: tap, enable: true)
                 }
-                HotKeyManager.dbg("tap re-enabled (was disabled)")
-                return Unmanaged.passRetained(event)
+                return Unmanaged.passUnretained(event)
+            }
+
+            if type == .tapDisabledByUserInput {
+                // System/user revoked access. Clean up SYNCHRONOUSLY here.
+                // Using DispatchQueue.main.async would deadlock: the main RunLoop
+                // is blocked on the event pipeline, which is blocked on this callback.
+                if let tap = manager.eventTap {
+                    CGEvent.tapEnable(tap: tap, enable: false)
+                }
+                if let source = manager.runLoopSource, let loop = manager.installedRunLoop {
+                    CFRunLoopRemoveSource(loop, source, .commonModes)
+                }
+                manager.eventTap = nil
+                manager.runLoopSource = nil
+                manager.installedRunLoop = nil
+                return Unmanaged.passUnretained(event)
             }
 
             if manager.isPaused {
-                return Unmanaged.passRetained(event)
+                return Unmanaged.passUnretained(event)
             }
 
             let flags = event.flags
@@ -63,7 +70,6 @@ final class HotKeyManager {
             if type == .keyDown {
                 let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
                 if SettingsManager.shared.matchesKeyHotKey(keyCode: keyCode, flags: flags) {
-                    HotKeyManager.dbg("Key hotkey matched! keyCode=\(keyCode)")
                     DispatchQueue.main.async { manager.onToggle?() }
                     return nil
                 }
@@ -72,13 +78,12 @@ final class HotKeyManager {
             // Mouse hotkey (right click)
             if type == .rightMouseDown {
                 if SettingsManager.shared.matchesMouseHotKey(button: 2, flags: flags) {
-                    HotKeyManager.dbg("Mouse hotkey matched! rightClick flags=\(flags.rawValue)")
                     DispatchQueue.main.async { manager.onToggle?() }
                     return nil
                 }
             }
 
-            return Unmanaged.passRetained(event)
+            return Unmanaged.passUnretained(event)
         }
 
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
@@ -94,27 +99,27 @@ final class HotKeyManager {
             callback: callback,
             userInfo: selfPtr
         ) else {
-            Self.dbg("Failed to create CGEventTap!")
             return
         }
 
         eventTap = tap
+        installedRunLoop = CFRunLoopGetMain()
         runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        if let source = runLoopSource {
-            CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
+        if let source = runLoopSource, let loop = installedRunLoop {
+            CFRunLoopAddSource(loop, source, .commonModes)
             CGEvent.tapEnable(tap: tap, enable: true)
-            Self.dbg("CGEventTap active! Hotkeys ready (keyboard + mouse).")
         }
     }
 
     private func removeEventTap() {
         if let tap = eventTap {
             CGEvent.tapEnable(tap: tap, enable: false)
-            if let source = runLoopSource {
-                CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
+            if let source = runLoopSource, let loop = installedRunLoop {
+                CFRunLoopRemoveSource(loop, source, .commonModes)
             }
             eventTap = nil
             runLoopSource = nil
+            installedRunLoop = nil
         }
     }
 
