@@ -3,7 +3,6 @@ options:
   bundleIdPrefix: com.orby
   deploymentTarget:
     macOS: "13.0"
-  xcodeVersion: "15.0"
   generateEmptyDirectories: true
 settings:
   base:
@@ -15,6 +14,12 @@ settings:
     INFOPLIST_FILE: Info.plist
     CODE_SIGN_ENTITLEMENTS: Orby.entitlements
     LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
+  configs:
+    Release:
+      SWIFT_OPTIMIZATION_LEVEL: "-O"
+      DEAD_CODE_STRIPPING: true
+      STRIP_INSTALLED_PRODUCT: true
+      COPY_PHASE_STRIP: true
 targets:
   Orby:
     type: application
@@ -30,3 +35,14 @@ targets:
       path: Info.plist
     entitlements:
       path: Orby.entitlements
+schemes:
+  Orby:
+    build:
+      targets:
+        Orby: all
+    run:
+      config: Debug
+    profile:
+      config: Release
+    archive:
+      config: Release

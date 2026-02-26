@@ -25,19 +25,36 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '15.0'
+          fetch-depth: 0
 
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="0.0.0"
+          fi
+          BUILD_NUMBER=$(git rev-list --count HEAD)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "build=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION  Build: $BUILD_NUMBER"
+
+      - name: Set version in Info.plist
+        run: |
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.version.outputs.version }}" Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ steps.version.outputs.build }}" Info.plist
+
       - name: Generate Xcode project
         run: xcodegen generate
 
-      - name: Build Orby
+      - name: Build Orby (Release, Universal Binary)
         run: |
           xcodebuild \
             -project Orby.xcodeproj \
@@ -49,51 +66,47 @@ jobs:
             CODE_SIGN_IDENTITY="-" \
             build
 
-      - name: Verify code signature
-        run: |
-          APP_PATH="build/Build/Products/Release/Orby.app"
-          echo "=== Code signature ==="
-          codesign -dvv "$APP_PATH" 2>&1 || true
-          echo "=== Verify ==="
-          codesign --verify --deep "$APP_PATH" 2>&1 || true
-
-      - name: Package Orby.app
+      - name: Sign and verify app bundle
         run: |
           APP_PATH="build/Build/Products/Release/Orby.app"
           if [ ! -d "$APP_PATH" ]; then
-            echo "Error: Orby.app not found at $APP_PATH"
-            find build -name "Orby.app" -type d
+            echo "::error::Orby.app not found in Release directory"
+            find build -name "Orby.app" -type d 2>/dev/null
             exit 1
           fi
 
-          # Create zip archive
-          cd build/Build/Products/Release
-          zip -r -y "../../../../Orby-macOS.zip" Orby.app
-          cd ../../../../
+          # Deep re-sign to ensure all nested binaries are signed
+          codesign --force --deep -s - "$APP_PATH"
 
-          # Create DMG
+          echo "=== Signature ==="
+          codesign -dvv "$APP_PATH" 2>&1
+          echo "=== Verify ==="
+          codesign --verify --deep --strict "$APP_PATH" 2>&1
+          echo "=== Architectures ==="
+          file "$APP_PATH/Contents/MacOS/Orby"
+
+      - name: Create DMG (with Applications shortcut)
+        run: |
+          APP_PATH="build/Build/Products/Release/Orby.app"
+          DMG_STAGING="dmg_staging"
+          mkdir -p "$DMG_STAGING"
+
+          cp -R "$APP_PATH" "$DMG_STAGING/"
+          ln -s /Applications "$DMG_STAGING/Applications"
+
           hdiutil create -volname "Orby" \
-            -srcfolder "$APP_PATH" \
+            -srcfolder "$DMG_STAGING" \
             -ov -format UDZO \
             "Orby-macOS.dmg"
 
-      - name: Get version
-        id: version
-        run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-            echo "tag=v${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/v}"
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
-            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          else
-            SHORT_SHA="${GITHUB_SHA::7}"
-            echo "version=0.0.0-${SHORT_SHA}" >> $GITHUB_OUTPUT
-            echo "tag=nightly-${SHORT_SHA}" >> $GITHUB_OUTPUT
-          fi
+          rm -rf "$DMG_STAGING"
 
-      - name: Upload build artifact
+      - name: Create ZIP archive
+        run: |
+          cd build/Build/Products/Release
+          zip -r -y "../../../../Orby-macOS.zip" Orby.app
+
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Orby-macOS
@@ -118,8 +131,8 @@ jobs:
         if: github.ref == 'refs/heads/release' && !startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          name: Orby ${{ steps.version.outputs.version }} (Pre-release)
-          tag_name: ${{ steps.version.outputs.tag }}
+          name: Orby Pre-release (${{ steps.version.outputs.build }})
+          tag_name: pre-${{ steps.version.outputs.build }}
           draft: false
           prerelease: true
           generate_release_notes: true
