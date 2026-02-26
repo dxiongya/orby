@@ -28,8 +28,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      - name: Install tools
+        run: |
+          brew install xcodegen create-dmg
 
       - name: Determine version
         id: version
@@ -85,21 +86,27 @@ jobs:
           echo "=== Architectures ==="
           file "$APP_PATH/Contents/MacOS/Orby"
 
-      - name: Create DMG (with Applications shortcut)
+      - name: Create DMG (drag-and-drop installer)
         run: |
           APP_PATH="build/Build/Products/Release/Orby.app"
-          DMG_STAGING="dmg_staging"
-          mkdir -p "$DMG_STAGING"
 
-          cp -R "$APP_PATH" "$DMG_STAGING/"
-          ln -s /Applications "$DMG_STAGING/Applications"
-
-          hdiutil create -volname "Orby" \
-            -srcfolder "$DMG_STAGING" \
-            -ov -format UDZO \
-            "Orby-macOS.dmg"
-
-          rm -rf "$DMG_STAGING"
+          # create-dmg produces a styled DMG with:
+          #   - Applications symlink for drag-and-drop
+          #   - Fixed window size and icon positions
+          #   - App icon and volume icon
+          # It returns exit code 2 when no signing identity is available
+          # for the DMG itself, but the DMG is still created successfully.
+          create-dmg \
+            --volname "Orby" \
+            --window-pos 200 120 \
+            --window-size 660 400 \
+            --icon-size 120 \
+            --icon "Orby.app" 160 200 \
+            --hide-extension "Orby.app" \
+            --app-drop-link 500 200 \
+            "Orby-macOS.dmg" \
+            "$APP_PATH" \
+            || test $? -eq 2
 
       - name: Create ZIP archive
         run: |
