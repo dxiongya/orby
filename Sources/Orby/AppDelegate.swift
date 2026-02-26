@@ -127,7 +127,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupStatusBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         guard let button = statusItem.button else { return }
-        button.image = NSImage(systemSymbolName: "circle.grid.3x3.fill", accessibilityDescription: "Orby")
+        if let logoImage = NSImage(named: "OrbyLogo") {
+            logoImage.size = NSSize(width: 18, height: 18)
+            logoImage.isTemplate = true
+            button.image = logoImage
+        } else {
+            button.image = NSImage(systemSymbolName: "circle.grid.3x3.fill", accessibilityDescription: "Orby")
+        }
 
         let menu = NSMenu()
         let show = NSMenuItem(title: "Show Orby", action: #selector(toggleOverlay), keyEquivalent: "")

@@ -51,18 +51,34 @@ struct OnboardingView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Progress dots
-            HStack(spacing: 8) {
-                ForEach(0..<steps.count, id: \.self) { i in
-                    Circle()
-                        .fill(i == currentStep ? Color.accentColor : Color.primary.opacity(0.15))
-                        .frame(width: 7, height: 7)
-                        .scaleEffect(i == currentStep ? 1.2 : 1.0)
-                        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: currentStep)
+            // Logo + Progress dots
+            HStack(spacing: 10) {
+                Group {
+                    Image("OrbyLogo")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                }
+                .frame(width: 28, height: 28)
+
+                Text("Orby")
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .foregroundColor(.primary)
+
+                Spacer()
+
+                HStack(spacing: 6) {
+                    ForEach(0..<steps.count, id: \.self) { i in
+                        Circle()
+                            .fill(i == currentStep ? Color.accentColor : Color.primary.opacity(0.15))
+                            .frame(width: 6, height: 6)
+                            .scaleEffect(i == currentStep ? 1.2 : 1.0)
+                            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: currentStep)
+                    }
                 }
             }
-            .padding(.top, 24)
-            .padding(.bottom, 20)
+            .padding(.horizontal, 24)
+            .padding(.top, 20)
+            .padding(.bottom, 16)
 
             // Card
             let step = steps[currentStep]

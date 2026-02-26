@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		06738DB41575B4477EB80F86 /* OverlayPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37F479D989AEC608BC6353B1 /* OverlayPanel.swift */; };
 		1F0B15E679185AE92271FF6B /* AppBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A055C15CB02157E1ADD0322 /* AppBubbleView.swift */; };
+		20A6EA39E7461941EF6B69ED /* OrbyLogo.png in Resources */ = {isa = PBXBuildFile; fileRef = C50B4AA4C6E65FCDC819BA18 /* OrbyLogo.png */; };
 		2B3AA736FCA6F966FF47BC85 /* MouseCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A67CE8CC80A6A0D3F43CBD76 /* MouseCapture.swift */; };
 		39B7BC87B90732BA17AC0222 /* SettingsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 453B1C124E5EA7CA86E2BABF /* SettingsManager.swift */; };
 		56AE481F395BE30EED8297B8 /* AppModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB2B28C9FA1D85358C1FCE17 /* AppModels.swift */; };
@@ -24,6 +25,7 @@
 		9E02D5A3C7C089F0E1DF859C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8208FD4DDF8C8DC9E0FEA19 /* SettingsView.swift */; };
 		A19A204AE774F7BD7E5FEA45 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E9E3318D42113683700C498 /* OnboardingView.swift */; };
 		BAB1BC946F7F924650B160E7 /* CircularLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45949468FD290F954965A005 /* CircularLayoutEngine.swift */; };
+		C4BF42F2C3DDC52B348C7228 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 209EF095529939E084C0E68D /* Assets.xcassets */; };
 		CD4C51F808380FBF64908D2A /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BE4B60391638593B5B9D6A5 /* AppDelegate.swift */; };
 		D4520549D10DDA8EC41E0FF1 /* HotKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BAC1A789FDEE9E9894023F /* HotKeyManager.swift */; };
 /* End PBXBuildFile section */
@@ -31,6 +33,7 @@
 /* Begin PBXFileReference section */
 		077405199E92B2D500A3B552 /* SubAppBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubAppBubbleView.swift; sourceTree = "<group>"; };
 		0CEF123612BA576F49DD0DF5 /* TagManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagManager.swift; sourceTree = "<group>"; };
+		209EF095529939E084C0E68D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		23BAC1A789FDEE9E9894023F /* HotKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyManager.swift; sourceTree = "<group>"; };
 		2A055C15CB02157E1ADD0322 /* AppBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBubbleView.swift; sourceTree = "<group>"; };
 		37F479D989AEC608BC6353B1 /* OverlayPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayPanel.swift; sourceTree = "<group>"; };
@@ -45,6 +48,7 @@
 		99BDFE4844A71E7700AEA1EF /* PermissionGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionGuideView.swift; sourceTree = "<group>"; };
 		A1B7F2468611123C55B77259 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		A67CE8CC80A6A0D3F43CBD76 /* MouseCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MouseCapture.swift; sourceTree = "<group>"; };
+		C50B4AA4C6E65FCDC819BA18 /* OrbyLogo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = OrbyLogo.png; sourceTree = "<group>"; };
 		C8D7EF0001E800821DC74F56 /* AppTag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTag.swift; sourceTree = "<group>"; };
 		E8208FD4DDF8C8DC9E0FEA19 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		EB2B28C9FA1D85358C1FCE17 /* AppModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModels.swift; sourceTree = "<group>"; };
@@ -52,6 +56,14 @@
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
+		23AD35EEFFD5248E42589774 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				C50B4AA4C6E65FCDC819BA18 /* OrbyLogo.png */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		369936558BCFDD48B635177C /* Sources */ = {
 			isa = PBXGroup;
 			children = (
@@ -117,9 +129,11 @@
 			isa = PBXGroup;
 			children = (
 				7BE4B60391638593B5B9D6A5 /* AppDelegate.swift */,
+				209EF095529939E084C0E68D /* Assets.xcassets */,
 				A1B7F2468611123C55B77259 /* main.swift */,
 				8889FECC541FD971CE8A3F04 /* Layout */,
 				387F36ACA0E2036BCFC834FE /* Models */,
+				23AD35EEFFD5248E42589774 /* Resources */,
 				41FE337130A2CC06B9D34939 /* Services */,
 				3C18ECFEC9AF656D935C0AA4 /* Views */,
 			);
@@ -142,6 +156,7 @@
 			buildConfigurationList = D7EE77BFA9F276DCD4E222B6 /* Build configuration list for PBXNativeTarget "Orby" */;
 			buildPhases = (
 				29AAE9619753FCD0D0F4F37E /* Sources */,
+				16170F6EB730590EBFE92183 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -186,6 +201,18 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		16170F6EB730590EBFE92183 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C4BF42F2C3DDC52B348C7228 /* Assets.xcassets in Resources */,
+				20A6EA39E7461941EF6B69ED /* OrbyLogo.png in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		29AAE9619753FCD0D0F4F37E /* Sources */ = {
