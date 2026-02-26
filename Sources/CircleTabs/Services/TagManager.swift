@@ -72,11 +72,11 @@ final class TagManager: ObservableObject {
             presetTags = tags
         } else {
             presetTags = [
-                AppTag(name: "工作", colorName: "blue"),
-                AppTag(name: "个人", colorName: "green"),
-                AppTag(name: "开发", colorName: "purple"),
-                AppTag(name: "设计", colorName: "orange"),
-                AppTag(name: "沟通", colorName: "pink"),
+                AppTag(name: "Work", colorName: "blue"),
+                AppTag(name: "Personal", colorName: "green"),
+                AppTag(name: "Dev", colorName: "purple"),
+                AppTag(name: "Design", colorName: "orange"),
+                AppTag(name: "Chat", colorName: "pink"),
             ]
         }
 

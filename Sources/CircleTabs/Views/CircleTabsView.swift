@@ -127,6 +127,12 @@ struct CircleTabsView: View {
     @State private var safeBounds: CGRect = .zero
     @State private var rightClickMonitor: Any?
 
+    // Inline tag input state
+    @State private var inlineTagKey: String?
+    @State private var inlineTagPosition: CGPoint = .zero
+    @State private var inlineTagText: String = ""
+    @FocusState private var inlineTagFocused: Bool
+
     // Close mode state
     @State private var closeMode: CloseMode = .none
     @State private var longPressWorkItem: DispatchWorkItem?
@@ -148,6 +154,7 @@ struct CircleTabsView: View {
                     mainAppBubbles()
                     subAppBubbles()
                     windowPreview()
+                    inlineTagInput()
                     closeModeHint()
                     closeButton()
                 }
@@ -196,7 +203,9 @@ struct CircleTabsView: View {
                 }
         )
         .onReceive(NotificationCenter.default.publisher(for: .escapePressed)) { _ in
-            if closeMode != .none {
+            if inlineTagKey != nil {
+                dismissInlineTag()
+            } else if closeMode != .none {
                 withAnimation(quickSpring) { closeMode = .none }
             } else {
                 dismiss()
@@ -300,12 +309,103 @@ struct CircleTabsView: View {
         }
     }
 
+    // MARK: - Inline Tag Input
+
+    private func inlineTagInput() -> some View {
+        Group {
+            if inlineTagKey != nil {
+                VStack(spacing: 4) {
+                    TextField("Tag name...", text: $inlineTagText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .focused($inlineTagFocused)
+                        .frame(width: 100)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule()
+                                .fill(Color.black.opacity(0.65))
+                                .overlay(
+                                    Capsule()
+                                        .strokeBorder(Color.white.opacity(0.3), lineWidth: 1)
+                                )
+                        )
+                        .onSubmit { commitInlineTag() }
+                }
+                .position(x: inlineTagPosition.x, y: inlineTagPosition.y)
+                .transition(.scale(scale: 0.6).combined(with: .opacity))
+            }
+        }
+    }
+
+    private func showInlineTagInput(for key: String) {
+        // Find the bubble position for this key
+        var pos = center
+        // Check if it's a window key (contains "::")
+        if key.contains("::") {
+            // Sub-app — find position from expanded windows
+            if let expIdx = expandedAppIndex, expIdx < apps.count {
+                let app = apps[expIdx]
+                let bundleId = app.id
+                for win in app.windows {
+                    if TagManager.key(for: bundleId, windowName: win.name) == key {
+                        pos = win.position
+                        break
+                    }
+                }
+            }
+        } else {
+            // Main app — find by bundleId
+            for app in apps {
+                if app.id == key {
+                    pos = app.position
+                    break
+                }
+            }
+        }
+
+        inlineTagText = ""
+        inlineTagKey = key
+        let bubbleR = CircularLayoutEngine.mainBubbleRadius
+        inlineTagPosition = CGPoint(x: pos.x, y: pos.y + bubbleR + 28)
+
+        // Delay focus to next run loop so the view appears first
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            inlineTagFocused = true
+        }
+    }
+
+    private func commitInlineTag() {
+        let name = inlineTagText.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, let key = inlineTagKey else {
+            dismissInlineTag()
+            return
+        }
+        // Pick color by cycling through available colors
+        let colorIdx = tagManager.presetTags.count % AppTag.availableColors.count
+        let colorName = AppTag.availableColors[colorIdx]
+        let newTag = AppTag(name: name, colorName: colorName)
+        tagManager.addPresetTag(newTag)
+        tagManager.toggleTag(newTag, for: key)
+        dismissInlineTag()
+    }
+
+    private func dismissInlineTag() {
+        withAnimation(quickSpring) {
+            inlineTagKey = nil
+            inlineTagText = ""
+            inlineTagFocused = false
+        }
+    }
+
     // MARK: - Close Mode Hint
 
     private func closeModeHint() -> some View {
         Group {
             if closeMode != .none {
-                Text(closeMode == .mainApps ? "点击关闭应用 · ESC 退出" : "点击关闭窗口 · ESC 退出")
+                Text(closeMode == .mainApps ? "Tap to quit app · ESC to exit" : "Tap to close window · ESC to exit")
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundColor(.white.opacity(0.9))
                     .padding(.horizontal, 14)
@@ -947,6 +1047,7 @@ struct CircleTabsView: View {
     }
 
     private func handleClick(at loc: CGPoint) {
+        if inlineTagKey != nil { dismissInlineTag(); return }
         let dx = loc.x - center.x, dy = loc.y - center.y
         if sqrt(dx*dx + dy*dy) < 22 { dismiss(); return }
         if let idx = expandedAppIndex, idx < apps.count,
@@ -1076,10 +1177,10 @@ struct CircleTabsView: View {
         }
 
         // ── Tag section ──
-        let tagHeader = NSMenuItem(title: "标记标签", action: nil, keyEquivalent: "")
+        let tagHeader = NSMenuItem(title: "Tags", action: nil, keyEquivalent: "")
         tagHeader.isEnabled = false
         tagHeader.attributedTitle = NSAttributedString(
-            string: "标记标签",
+            string: "Tags",
             attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.secondaryLabelColor]
         )
         menu.addItem(tagHeader)
@@ -1094,9 +1195,17 @@ struct CircleTabsView: View {
             menu.addItem(item)
         }
 
+        menu.addItem(.separator())
+
+        // "New tag" — triggers inline text field below the bubble
+        let newTagItem = ClosureMenuItem(title: "New Tag...") { [self] in
+            showInlineTagInput(for: key)
+        }
+        menu.addItem(newTagItem)
+
         if !assignedIds.isEmpty {
             menu.addItem(.separator())
-            let clear = ClosureMenuItem(title: "清除标签") { [weak tagManager] in
+            let clear = ClosureMenuItem(title: "Clear Tags") { [weak tagManager] in
                 tagManager?.clearTags(for: key)
             }
             menu.addItem(clear)
@@ -1105,10 +1214,10 @@ struct CircleTabsView: View {
         menu.addItem(.separator())
 
         // ── Quick launch section ──
-        let quickHeader = NSMenuItem(title: "绑定快捷键", action: nil, keyEquivalent: "")
+        let quickHeader = NSMenuItem(title: "Quick Launch", action: nil, keyEquivalent: "")
         quickHeader.isEnabled = false
         quickHeader.attributedTitle = NSAttributedString(
-            string: "绑定快捷键",
+            string: "Quick Launch",
             attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.secondaryLabelColor]
         )
         menu.addItem(quickHeader)
@@ -1137,7 +1246,7 @@ struct CircleTabsView: View {
 
         if currentSlot != nil {
             menu.addItem(.separator())
-            let unbind = ClosureMenuItem(title: "取消绑定") { [weak quickLaunch] in
+            let unbind = ClosureMenuItem(title: "Unbind") { [weak quickLaunch] in
                 if let s = currentSlot { quickLaunch?.unbind(slot: s) }
             }
             menu.addItem(unbind)

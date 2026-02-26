@@ -69,16 +69,35 @@ struct AppBubbleView: View {
             }
             .frame(width: size, height: size)
             .scaleEffect(isHovered ? 1.18 : 1.0)
-            // Tag dots
+            // Tag labels
             .overlay(alignment: .bottom) {
                 if !tags.isEmpty && !isInCloseMode {
                     HStack(spacing: 3) {
-                        ForEach(tags.prefix(3)) { tag in
-                            Circle()
-                                .fill(tag.color)
-                                .frame(width: 8, height: 8)
-                                .shadow(color: tag.color.opacity(0.6), radius: 2)
-                                .overlay(Circle().strokeBorder(.white.opacity(0.3), lineWidth: 0.5))
+                        ForEach(tags.prefix(2)) { tag in
+                            Text(tag.name)
+                                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .frame(maxWidth: 52)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule()
+                                        .fill(tag.color.opacity(0.85))
+                                        .shadow(color: tag.color.opacity(0.5), radius: 2)
+                                )
+                        }
+                        if tags.count > 2 {
+                            Text("+\(tags.count - 2)")
+                                .font(.system(size: 8, weight: .bold, design: .rounded))
+                                .foregroundColor(.white.opacity(0.9))
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.gray.opacity(0.7))
+                                )
                         }
                     }
                     .offset(y: -3)

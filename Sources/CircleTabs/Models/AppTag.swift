@@ -55,16 +55,16 @@ struct AppTag: Identifiable, Codable, Equatable, Hashable {
 
     static func displayNameFor(_ name: String) -> String {
         switch name {
-        case "red": return "红色"
-        case "blue": return "蓝色"
-        case "green": return "绿色"
-        case "orange": return "橙色"
-        case "purple": return "紫色"
-        case "pink": return "粉色"
-        case "yellow": return "黄色"
-        case "gray": return "灰色"
-        case "cyan": return "青色"
-        case "mint": return "薄荷"
+        case "red": return "Red"
+        case "blue": return "Blue"
+        case "green": return "Green"
+        case "orange": return "Orange"
+        case "purple": return "Purple"
+        case "pink": return "Pink"
+        case "yellow": return "Yellow"
+        case "gray": return "Gray"
+        case "cyan": return "Cyan"
+        case "mint": return "Mint"
         default: return name
         }
     }

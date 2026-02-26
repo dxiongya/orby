@@ -22,7 +22,7 @@ struct SettingsView: View {
                     Image(systemName: "gearshape.fill")
                         .font(.system(size: 14))
                         .foregroundColor(.secondary)
-                    Text("CircleTabs 设置")
+                    Text("CircleTabs Settings")
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                 }
                 .padding(.horizontal, 20)
@@ -55,7 +55,7 @@ struct SettingsView: View {
                 Image(systemName: "keyboard")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
-                Text("快捷键绑定")
+                Text("Hotkey Bindings")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.primary)
             }
@@ -96,11 +96,11 @@ struct SettingsView: View {
             if isRecording {
                 HStack(spacing: 8) {
                     Circle().fill(Color.red).frame(width: 8, height: 8)
-                    Text(recordingDisplay.isEmpty ? "按下按键/鼠标组合..." : recordingDisplay)
+                    Text(recordingDisplay.isEmpty ? "Press a key or mouse combo..." : recordingDisplay)
                         .font(.system(size: 12, design: .rounded))
                         .foregroundColor(.secondary)
                     Spacer()
-                    Button("取消") { stopRecording() }
+                    Button("Cancel") { stopRecording() }
                         .font(.system(size: 12))
                         .buttonStyle(.plain)
                         .foregroundColor(.blue)
@@ -115,14 +115,14 @@ struct SettingsView: View {
                 Button(action: startRecording) {
                     HStack(spacing: 4) {
                         Image(systemName: "plus.circle.fill").font(.system(size: 14))
-                        Text("添加快捷键").font(.system(size: 12, weight: .medium))
+                        Text("Add Hotkey").font(.system(size: 12, weight: .medium))
                     }
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(.blue)
             }
 
-            Text("支持按键、鼠标右键及组合键，ESC 取消录制")
+            Text("Supports keys, right-click & combos. ESC to cancel.")
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
         }
@@ -138,20 +138,20 @@ struct SettingsView: View {
                 Image(systemName: "eye")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
-                Text("窗口预览")
+                Text("Window Preview")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.primary)
             }
 
-            Toggle("显示窗口预览", isOn: $settings.showPreview)
+            Toggle("Show Window Preview", isOn: $settings.showPreview)
                 .font(.system(size: 13))
 
             if settings.showPreview {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("预览延迟").font(.system(size: 12)).foregroundColor(.secondary)
+                        Text("Preview Delay").font(.system(size: 12)).foregroundColor(.secondary)
                         Spacer()
-                        Text(String(format: "%.1f 秒", settings.previewDelay))
+                        Text(String(format: "%.1fs", settings.previewDelay))
                             .font(.system(size: 12, design: .monospaced))
                             .foregroundColor(.secondary)
                     }
@@ -172,7 +172,7 @@ struct SettingsView: View {
                 Image(systemName: "tag")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
-                Text("标签预设")
+                Text("Tag Presets")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.primary)
             }
@@ -224,11 +224,11 @@ struct SettingsView: View {
                     .menuStyle(.borderlessButton)
                     .frame(width: 30)
 
-                    TextField("标签名称", text: $newTagName)
+                    TextField("Tag name", text: $newTagName)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 12))
 
-                    Button("添加") {
+                    Button("Add") {
                         guard !newTagName.isEmpty else { return }
                         tagManager.addPresetTag(AppTag(name: newTagName, colorName: newTagColor))
                         newTagName = ""
@@ -237,7 +237,7 @@ struct SettingsView: View {
                     .font(.system(size: 12))
                     .disabled(newTagName.isEmpty)
 
-                    Button("取消") {
+                    Button("Cancel") {
                         isAddingTag = false
                         newTagName = ""
                     }
@@ -247,14 +247,14 @@ struct SettingsView: View {
                 Button { isAddingTag = true } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "plus.circle.fill").font(.system(size: 14))
-                        Text("添加标签").font(.system(size: 12, weight: .medium))
+                        Text("Add Tag").font(.system(size: 12, weight: .medium))
                     }
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(.blue)
             }
 
-            Text("在应用上右键可快速标记")
+            Text("Right-click on apps to quickly assign tags")
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
         }
@@ -270,7 +270,7 @@ struct SettingsView: View {
                 Image(systemName: "bolt.fill")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
-                Text("快捷唤起")
+                Text("Quick Launch")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.primary)
             }
@@ -278,7 +278,7 @@ struct SettingsView: View {
             VStack(spacing: 4) {
                 let boundSlots = (1...9).filter { quickLaunch.bindings[$0] != nil }
                 if boundSlots.isEmpty {
-                    Text("暂无绑定")
+                    Text("No bindings")
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
                         .padding(8)
@@ -323,7 +323,7 @@ struct SettingsView: View {
                     .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
             )
 
-            Text("在应用上右键绑定 ⌥+数字 快捷键，应用关闭后快捷键自动失效")
+            Text("Right-click apps to bind ⌥+Number. Auto-expires when app closes.")
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
         }

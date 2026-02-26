@@ -46,15 +46,35 @@ struct SubAppBubbleView: View {
         .frame(width: size, height: size)
         .opacity(window.isMinimized ? 0.6 : 1.0)
         .scaleEffect(isHovered ? 1.2 : 1.0)
-        // Tag dots
+        // Tag labels
         .overlay(alignment: .bottom) {
             if !tags.isEmpty && !isInCloseMode {
                 HStack(spacing: 2) {
-                    ForEach(tags.prefix(3)) { tag in
-                        Circle()
-                            .fill(tag.color)
-                            .frame(width: 6, height: 6)
-                            .shadow(color: tag.color.opacity(0.6), radius: 1.5)
+                    ForEach(tags.prefix(2)) { tag in
+                        Text(tag.name)
+                            .font(.system(size: 8, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: 42)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1.5)
+                            .background(
+                                Capsule()
+                                    .fill(tag.color.opacity(0.85))
+                                    .shadow(color: tag.color.opacity(0.5), radius: 1.5)
+                            )
+                    }
+                    if tags.count > 2 {
+                        Text("+\(tags.count - 2)")
+                            .font(.system(size: 7, weight: .bold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.9))
+                            .padding(.horizontal, 3)
+                            .padding(.vertical, 1.5)
+                            .background(
+                                Capsule()
+                                    .fill(Color.gray.opacity(0.7))
+                            )
                     }
                 }
                 .offset(y: -2)

@@ -105,7 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         show.target = self
         menu.addItem(show)
         menu.addItem(NSMenuItem.separator())
-        let settingsItem = NSMenuItem(title: "设置...", action: #selector(openSettings), keyEquivalent: ",")
+        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
         menu.addItem(NSMenuItem.separator())
@@ -143,7 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "CircleTabs 设置"
+        window.title = "CircleTabs Settings"
         window.contentView = NSHostingView(rootView: settingsView)
         window.center()
         window.isReleasedWhenClosed = false
