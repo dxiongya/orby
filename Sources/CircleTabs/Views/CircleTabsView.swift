@@ -17,6 +17,10 @@ private class OptionKeyState: ObservableObject {
     @Published var isHeld = false
     private var monitor: Any?
 
+    deinit {
+        if let m = monitor { NSEvent.removeMonitor(m) }
+    }
+
     func startMonitoring() {
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
@@ -53,6 +57,10 @@ private class PreviewZoomState: ObservableObject {
             self?.handleMagnify(event)
             return event
         }
+    }
+
+    deinit {
+        if let m = monitor { NSEvent.removeMonitor(m) }
     }
 
     func stopMonitoring() {
@@ -219,6 +227,7 @@ struct CircleTabsView: View {
         longPressWorkItem?.cancel()
 
         let work = DispatchWorkItem { [self] in
+            guard appeared else { return }
             // Check sub-apps first (higher z-order)
             if let idx = expandedAppIndex, idx < apps.count,
                let _ = CircularLayoutEngine.findClosestSubApp(
@@ -556,7 +565,11 @@ struct CircleTabsView: View {
                         showLabel: hoveredSubAppIndex == wIdx || optionKey.isHeld,
                         isInCloseMode: closeMode == .subApps,
                         tags: tagManager.tags(for: TagManager.key(for: apps[idx].id, windowName: apps[idx].windows[wIdx].name)),
-                        quickSlot: quickLaunch.slot(for: apps[idx].id, windowName: apps[idx].windows[wIdx].name)
+                        quickSlot: {
+                            let wid = apps[idx].windows[wIdx].cgWindowID
+                            return quickLaunch.slot(for: apps[idx].id, cgWindowID: wid > 0 ? wid : nil)
+                                ?? quickLaunch.slot(for: apps[idx].id)
+                        }()
                     )
                     .zIndex(hoveredSubAppIndex == wIdx ? 100 : 0)
                     .scaleEffect(vis ? 1.0 : 0.01)
@@ -699,7 +712,7 @@ struct CircleTabsView: View {
 
     /// Schedule delayed preview dismissal (gives mouse time to reach the preview card)
     private func schedulePreviewDismiss() {
-        guard previewDismissWorkItem == nil else { return }
+        previewDismissWorkItem?.cancel()
         let work = DispatchWorkItem { [self] in
             previewDismissWorkItem = nil
             withAnimation(quickSpring) { clearPreviewNow() }
@@ -913,16 +926,20 @@ struct CircleTabsView: View {
             guard appIdx < apps.count, wIdx < apps[appIdx].windows.count else { return }
             let win = apps[appIdx].windows[wIdx]
             guard win.id == windowId, !win.isMinimized else { return }
-            if let img = AppDiscoveryService.shared.captureWindowPreview(cgWindowID: win.cgWindowID) {
+            let captureAnchor = anchorOverride ?? win.position
+            let winName = win.name
+            // Capture on background thread to avoid blocking UI
+            AppDiscoveryService.shared.captureWindowPreviewAsync(cgWindowID: win.cgWindowID) { [self] img in
+                guard let img = img else { return }
+                guard previewForWindowId == windowId else { return } // stale
                 withAnimation(quickSpring) {
                     previewImage = img
-                    previewTitle = win.name.isEmpty ? "Window" : win.name
+                    previewTitle = winName.isEmpty ? "Window" : winName
 
                     let cardW = max(img.size.width, 160) + 12
                     let cardH = img.size.height + 40
-                    let anchor = anchorOverride ?? win.position
                     let pos = findBestPreviewPosition(
-                        anchor: anchor, cardSize: CGSize(width: cardW, height: cardH)
+                        anchor: captureAnchor, cardSize: CGSize(width: cardW, height: cardH)
                     )
                     previewPosition = pos
                     previewFrame = CGRect(
@@ -1036,7 +1053,7 @@ struct CircleTabsView: View {
         let window = apps[idx].windows[wIdx]
         AppDiscoveryService.shared.closeWindow(window)
         clearPreviewNow()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
             subAppStaggerFlags = []
             withAnimation(softSpring) {
                 expandedAppIndex = nil; hoveredSubAppIndex = nil; recalcPushOffsets()
@@ -1162,17 +1179,17 @@ struct CircleTabsView: View {
         let app = apps[appIdx]
         let bundleId = app.id
 
-        let key: String
+        let tagKey: String
         let displayName: String
-        var windowName: String? = nil
+        var boundCGWindowID: CGWindowID? = nil
 
         if let wIdx = windowIdx, wIdx < app.windows.count {
             let win = app.windows[wIdx]
-            key = TagManager.key(for: bundleId, windowName: win.name)
+            tagKey = TagManager.key(for: bundleId, windowName: win.name)
             displayName = win.name.isEmpty ? app.name : win.name
-            windowName = win.name
+            boundCGWindowID = win.cgWindowID > 0 ? win.cgWindowID : nil
         } else {
-            key = TagManager.key(for: bundleId)
+            tagKey = TagManager.key(for: bundleId)
             displayName = app.name
         }
 
@@ -1185,11 +1202,11 @@ struct CircleTabsView: View {
         )
         menu.addItem(tagHeader)
 
-        let assignedIds = tagManager.assignments[key] ?? []
+        let assignedIds = tagManager.assignments[tagKey] ?? []
         for tag in tagManager.presetTags {
             let assigned = assignedIds.contains(tag.id)
             let item = ClosureMenuItem(title: "\(tag.emoji) \(tag.name)") { [weak tagManager] in
-                tagManager?.toggleTag(tag, for: key)
+                tagManager?.toggleTag(tag, for: tagKey)
             }
             item.state = assigned ? .on : .off
             menu.addItem(item)
@@ -1199,14 +1216,14 @@ struct CircleTabsView: View {
 
         // "New tag" — triggers inline text field below the bubble
         let newTagItem = ClosureMenuItem(title: "New Tag...") { [self] in
-            showInlineTagInput(for: key)
+            showInlineTagInput(for: tagKey)
         }
         menu.addItem(newTagItem)
 
         if !assignedIds.isEmpty {
             menu.addItem(.separator())
             let clear = ClosureMenuItem(title: "Clear Tags") { [weak tagManager] in
-                tagManager?.clearTags(for: key)
+                tagManager?.clearTags(for: tagKey)
             }
             menu.addItem(clear)
         }
@@ -1222,12 +1239,16 @@ struct CircleTabsView: View {
         )
         menu.addItem(quickHeader)
 
-        let currentSlot = quickLaunch.slot(for: bundleId, windowName: windowName)
+        // Sub-app: bind by cgWindowID (stable across title changes)
+        // Main app: bind at app level (cgWindowID = nil)
+        let currentSlot = quickLaunch.slot(for: bundleId, cgWindowID: boundCGWindowID)
 
         for slot in 1...9 {
             let existing = quickLaunch.bindings[slot]
+            let isThisTarget = existing?.bundleId == bundleId
+                && existing?.cgWindowID == boundCGWindowID.map({ UInt32($0) })
             let title: String
-            if existing?.bundleId == bundleId && existing?.windowName == windowName {
+            if isThisTarget {
                 title = "⌥\(slot) ✓"
             } else if let existing = existing {
                 title = "⌥\(slot)  →  \(existing.displayName)"
@@ -1236,11 +1257,9 @@ struct CircleTabsView: View {
             }
 
             let item = ClosureMenuItem(title: title) { [weak quickLaunch] in
-                quickLaunch?.bind(slot: slot, bundleId: bundleId, windowName: windowName, displayName: displayName)
+                quickLaunch?.bind(slot: slot, bundleId: bundleId, cgWindowID: boundCGWindowID, displayName: displayName)
             }
-            if existing?.bundleId == bundleId && existing?.windowName == windowName {
-                item.state = .on
-            }
+            if isThisTarget { item.state = .on }
             menu.addItem(item)
         }
 

@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var escapeMonitor: Any?
     private var permissionWindow: NSWindow?
     private var settingsWindow: NSWindow?
+    private var onboardingWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusBar()
@@ -50,6 +51,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupHotKey()
         QuickLaunchManager.shared.startMonitoring()
         closePermissionGuide()
+
+        // Show onboarding on first launch
+        if !UserDefaults.standard.bool(forKey: "onboardingCompleted") {
+            showOnboarding()
+        }
+    }
+
+    // MARK: - Onboarding
+
+    private func showOnboarding() {
+        let view = OnboardingView {
+            DispatchQueue.main.async { [weak self] in
+                UserDefaults.standard.set(true, forKey: "onboardingCompleted")
+                self?.onboardingWindow?.close()
+                self?.onboardingWindow = nil
+            }
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 440),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Welcome to CircleTabs"
+        window.contentView = NSHostingView(rootView: view)
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        onboardingWindow = window
     }
 
     // MARK: - Permission Guide
@@ -108,6 +141,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
+        let guideItem = NSMenuItem(title: "Usage Guide...", action: #selector(openOnboarding), keyEquivalent: "")
+        guideItem.target = self
+        menu.addItem(guideItem)
         menu.addItem(NSMenuItem.separator())
         let perm = NSMenuItem(title: "Open Accessibility Settings...", action: #selector(openAccessibility), keyEquivalent: "")
         perm.target = self
@@ -206,6 +242,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isOverlayVisible = false
         overlayPanel?.hideOverlay()
         overlayPanel = nil
+    }
+
+    @objc private func openOnboarding() {
+        showOnboarding()
     }
 
     @objc private func openAccessibility() {

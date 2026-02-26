@@ -39,23 +39,23 @@ struct CircularLayoutEngine {
         margin: CGFloat,
         safeBounds: CGRect
     ) -> (startAngle: Double, arcSpan: Double) {
-        let n = 360
+        let n = 72  // 5° steps — sufficient precision, 5× faster than 360
         var valid = [Bool](repeating: false, count: n)
 
+        let step = 2.0 * .pi / Double(n)
         for i in 0..<n {
-            let angle = Double(i) / Double(n) * 2 * .pi - .pi
+            let angle = step * Double(i) - .pi
             let x = center.x + radius * cos(angle)
             let y = center.y + radius * sin(angle)
             valid[i] = x >= safeBounds.minX + margin && x <= safeBounds.maxX - margin
                     && y >= safeBounds.minY + margin && y <= safeBounds.maxY - margin
         }
 
-        // Find longest contiguous run (double-array for wrap-around)
-        let doubled = valid + valid
+        // Find longest contiguous run (modulo wrap-around, no array copy)
         var bestStart = 0, bestLen = 0, curStart = 0, curLen = 0
 
-        for i in 0..<doubled.count {
-            if doubled[i] {
+        for i in 0..<(n * 2) {
+            if valid[i % n] {
                 if curLen == 0 { curStart = i }
                 curLen += 1
                 if curLen > bestLen { bestLen = curLen; bestStart = curStart }

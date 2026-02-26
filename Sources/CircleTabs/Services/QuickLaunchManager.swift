@@ -5,7 +5,7 @@ final class QuickLaunchManager: ObservableObject {
 
     struct Binding: Codable, Equatable {
         let bundleId: String
-        let windowName: String?
+        let cgWindowID: UInt32?      // nil = app-level, non-nil = specific window
         let displayName: String
     }
 
@@ -23,27 +23,34 @@ final class QuickLaunchManager: ObservableObject {
 
     // MARK: - Bind / Unbind
 
-    func bind(slot: Int, bundleId: String, windowName: String?, displayName: String) {
+    func bind(slot: Int, bundleId: String, cgWindowID: CGWindowID? = nil, displayName: String) {
         // Remove old binding for the same target
-        for (s, b) in bindings where b.bundleId == bundleId && b.windowName == windowName {
+        for (s, b) in bindings where b.bundleId == bundleId && b.cgWindowID == cgWindowID {
             bindings[s] = nil
         }
-        bindings[slot] = Binding(bundleId: bundleId, windowName: windowName, displayName: displayName)
+        bindings[slot] = Binding(
+            bundleId: bundleId,
+            cgWindowID: cgWindowID.map { UInt32($0) },
+            displayName: displayName
+        )
     }
 
     func unbind(slot: Int) {
         bindings[slot] = nil
     }
 
-    func slot(for bundleId: String, windowName: String? = nil) -> Int? {
-        for (slot, b) in bindings where b.bundleId == bundleId && b.windowName == windowName {
+    /// Find the slot bound to a specific app or window.
+    func slot(for bundleId: String, cgWindowID: CGWindowID? = nil) -> Int? {
+        if let wid = cgWindowID {
+            // Exact window match
+            for (slot, b) in bindings where b.bundleId == bundleId && b.cgWindowID == UInt32(wid) {
+                return slot
+            }
+        }
+        // App-level match
+        for (slot, b) in bindings where b.bundleId == bundleId && b.cgWindowID == nil {
             return slot
         }
-        return nil
-    }
-
-    func nextAvailableSlot() -> Int? {
-        for i in 1...9 where bindings[i] == nil { return i }
         return nil
     }
 
@@ -56,9 +63,11 @@ final class QuickLaunchManager: ObservableObject {
         }
         guard let app = runningApps.first else { return }
 
-        if let windowName = binding.windowName {
-            let win = WindowItem(id: 0, name: windowName, ownerPid: app.processIdentifier, windowNumber: 0)
-            AppDiscoveryService.shared.activateWindow(win)
+        if let wid = binding.cgWindowID {
+            // Activate specific window by cgWindowID
+            AppDiscoveryService.shared.activateWindowByCGID(
+                CGWindowID(wid), pid: app.processIdentifier
+            )
         } else {
             app.activate(options: [.activateIgnoringOtherApps])
         }
@@ -101,12 +110,12 @@ final class QuickLaunchManager: ObservableObject {
     private func save() {
         let serializable = Dictionary(uniqueKeysWithValues: bindings.map { ("\($0.key)", $0.value) })
         if let data = try? JSONEncoder().encode(serializable) {
-            UserDefaults.standard.set(data, forKey: "quickLaunchBindings")
+            UserDefaults.standard.set(data, forKey: "quickLaunchBindings2") // new key for new format
         }
     }
 
     private func load() {
-        guard let data = UserDefaults.standard.data(forKey: "quickLaunchBindings"),
+        guard let data = UserDefaults.standard.data(forKey: "quickLaunchBindings2"),
               let raw = try? JSONDecoder().decode([String: Binding].self, from: data)
         else { return }
         bindings = Dictionary(uniqueKeysWithValues: raw.compactMap {

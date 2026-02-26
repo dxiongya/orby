@@ -295,11 +295,10 @@ struct SettingsView: View {
                                 Text(binding.displayName)
                                     .font(.system(size: 13))
                                     .foregroundColor(.primary)
-                                if let wn = binding.windowName {
-                                    Text("· \(wn)")
-                                        .font(.system(size: 11))
+                                if binding.cgWindowID != nil {
+                                    Image(systemName: "macwindow")
+                                        .font(.system(size: 10))
                                         .foregroundColor(.secondary)
-                                        .lineLimit(1)
                                 }
                                 Spacer()
                                 Button {

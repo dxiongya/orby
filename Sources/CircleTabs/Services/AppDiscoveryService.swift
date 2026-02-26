@@ -9,8 +9,11 @@ final class AppDiscoveryService {
     private static let minWindowSize: CGFloat = 100
 
     /// Cached ScreenCaptureKit window titles (CGWindowID → title)
-    /// Refreshed each time getRunningApps() is called.
+    /// Persists across calls — refreshed asynchronously in background.
     private var scWindowTitles: [CGWindowID: String] = [:]
+
+    /// Icon cache — avoids re-fetching and re-sizing app icons every call.
+    private var iconCache: [String: NSImage] = [:]
 
     // MARK: - Public
 
@@ -22,8 +25,8 @@ final class AppDiscoveryService {
         // Pre-fetch CG windows grouped by PID (for cross-referencing names & IDs)
         let cgByPid = getCGWindowsByPid()
 
-        // Pre-fetch ScreenCaptureKit window titles (works with temporary access on macOS 15)
-        refreshSCWindowTitles()
+        // Kick off async SC title refresh (uses cached titles from previous call for now)
+        refreshSCWindowTitlesAsync()
 
         // Deduplicate by bundleIdentifier — merge windows from multiple processes
         var seen: [String: Int] = [:]
@@ -41,8 +44,14 @@ final class AppDiscoveryService {
                 // Same app, different process — merge windows
                 appItems[existingIdx].windows += windows
             } else {
-                let icon = app.icon ?? NSImage(systemSymbolName: "app.fill", accessibilityDescription: nil) ?? NSImage()
-                icon.size = NSSize(width: 32, height: 32)
+                let icon: NSImage
+                if let cached = iconCache[bundleId] {
+                    icon = cached
+                } else {
+                    icon = app.icon ?? NSImage(systemSymbolName: "app.fill", accessibilityDescription: nil) ?? NSImage()
+                    icon.size = NSSize(width: 32, height: 32)
+                    iconCache[bundleId] = icon
+                }
 
                 seen[bundleId] = appItems.count
                 appItems.append(AppItem(
@@ -129,10 +138,7 @@ final class AppDiscoveryService {
             let matched = matchCGWindow(axPos: axPos, axSize: axSize, axTitle: axTitle, cgEntries: available)
             if let m = matched { matchedCGIDs.insert(m.windowID) }
 
-            // Build window name with smart priority:
-            // - AX title is usually best (e.g. Chrome shows profile name "大雄 (大雄呀)")
-            // - But Electron apps often return just the app name (e.g. "Pencil")
-            //   → in that case, SC/CG names give the real title ("doc.pen — Edited")
+            // Build window name with smart priority
             let cgID = matched?.windowID ?? 0
             let cgName = matched?.name ?? ""
             let scName = cgID > 0 ? (scWindowTitles[cgID] ?? "") : ""
@@ -140,14 +146,12 @@ final class AppDiscoveryService {
 
             let finalName: String
             if !axTitle.isEmpty && !axTitleIsGeneric {
-                // AX title is specific (e.g. Chrome profile) — use it
                 finalName = axTitle
             } else if !cgName.isEmpty {
                 finalName = cgName
             } else if !scName.isEmpty {
                 finalName = scName
             } else if !axTitle.isEmpty {
-                // Generic AX title (same as app name) — still better than nothing
                 finalName = axTitle
             } else if let doc = docPath, let url = URL(string: doc) {
                 finalName = url.lastPathComponent
@@ -155,11 +159,7 @@ final class AppDiscoveryService {
                 finalName = ""
             }
 
-            // Always generate unique ID: use CG window ID if available, otherwise synthetic
             let uniqueID = Int(cgID != 0 ? cgID : UInt32(pid) &* 1000 &+ UInt32(i))
-
-            NSLog("[CircleTabs] AX win[%d]: axTitle='%@' cgName='%@' scName='%@' final='%@' cgID=%d",
-                  i, axTitle, cgName, scName, finalName, cgID)
 
             items.append(WindowItem(
                 id: uniqueID,
@@ -171,7 +171,7 @@ final class AppDiscoveryService {
             ))
         }
 
-        // Disambiguate same-name windows (e.g. "Pencil", "Pencil" → "Pencil (1)", "Pencil (2)")
+        // Disambiguate same-name windows
         var nameCounts: [String: Int] = [:]
         for item in items { nameCounts[item.name, default: 0] += 1 }
         var nameCounters: [String: Int] = [:]
@@ -186,20 +186,15 @@ final class AppDiscoveryService {
             }
         }
 
-        NSLog("[CircleTabs] AX pid=%d valid=%d/%d titles=[%@]",
-              pid, items.count, axWindows.count,
-              items.map { $0.name.isEmpty ? "(empty)" : $0.name }.joined(separator: ", "))
         return items
     }
 
     /// Match AX window to CG window by position+size proximity
     private func matchCGWindow(axPos: CGPoint, axSize: CGSize, axTitle: String,
                                cgEntries: [CGEntry]) -> CGEntry? {
-        // Try exact title match first
         if !axTitle.isEmpty {
             if let m = cgEntries.first(where: { $0.name == axTitle }) { return m }
         }
-        // Then geometry match (within 20pt tolerance)
         let tol: CGFloat = 20
         for cg in cgEntries {
             if abs(cg.bounds.origin.x - axPos.x) < tol
@@ -214,27 +209,21 @@ final class AppDiscoveryService {
 
     // MARK: - ScreenCaptureKit Window Titles
 
-    private func refreshSCWindowTitles() {
-        scWindowTitles = [:]
-        // Run on background queue to avoid main-thread deadlock
-        let group = DispatchGroup()
-        group.enter()
+    /// Non-blocking async refresh — uses cached titles until new ones arrive.
+    private func refreshSCWindowTitlesAsync() {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: true) { content, _ in
-                if let windows = content?.windows {
-                    var titles: [CGWindowID: String] = [:]
-                    for w in windows {
-                        if let title = w.title, !title.isEmpty {
-                            titles[w.windowID] = title
-                        }
+                guard let windows = content?.windows else { return }
+                var titles: [CGWindowID: String] = [:]
+                for w in windows {
+                    if let title = w.title, !title.isEmpty {
+                        titles[w.windowID] = title
                     }
-                    self?.scWindowTitles = titles
                 }
-                group.leave()
+                // Update cache — next getRunningApps() call will pick up fresh titles
+                self?.scWindowTitles = titles
             }
         }
-        // Wait briefly — ScreenCaptureKit is fast when permission is already granted
-        _ = group.wait(timeout: .now() + 0.5)
     }
 
     // MARK: - CG Window List
@@ -271,28 +260,29 @@ final class AppDiscoveryService {
 
     // MARK: - Preview Capture
 
-    func captureWindowPreview(cgWindowID: CGWindowID, maxSize: CGFloat = 320) -> NSImage? {
-        guard cgWindowID > 0 else { return nil }
-        guard let cgImage = CGWindowListCreateImage(
-            .null, .optionIncludingWindow, cgWindowID,
-            [.boundsIgnoreFraming, .bestResolution]
-        ) else { return nil }
+    /// Capture window preview asynchronously on a background thread.
+    func captureWindowPreviewAsync(cgWindowID: CGWindowID, maxSize: CGFloat = 320, completion: @escaping (NSImage?) -> Void) {
+        guard cgWindowID > 0 else { completion(nil); return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let cgImage = CGWindowListCreateImage(
+                .null, .optionIncludingWindow, cgWindowID,
+                [.boundsIgnoreFraming, .bestResolution]
+            ) else { DispatchQueue.main.async { completion(nil) }; return }
 
-        let pixelW = CGFloat(cgImage.width)
-        let pixelH = CGFloat(cgImage.height)
-        guard pixelW > 0, pixelH > 0 else { return nil }
+            let pixelW = CGFloat(cgImage.width)
+            let pixelH = CGFloat(cgImage.height)
+            guard pixelW > 0, pixelH > 0 else { DispatchQueue.main.async { completion(nil) }; return }
 
-        // CGWindowListCreateImage with .bestResolution returns Retina pixels.
-        // Convert to points first, then scale to fit maxSize.
-        let screenScale = NSScreen.main?.backingScaleFactor ?? 2.0
-        let ptW = pixelW / screenScale
-        let ptH = pixelH / screenScale
-        let scale = min(maxSize / ptW, maxSize / ptH, 1.0)
-        let newW = ptW * scale
-        let newH = ptH * scale
+            let screenScale = NSScreen.main?.backingScaleFactor ?? 2.0
+            let ptW = pixelW / screenScale
+            let ptH = pixelH / screenScale
+            let scale = min(maxSize / ptW, maxSize / ptH, 1.0)
+            let newW = ptW * scale
+            let newH = ptH * scale
 
-        let image = NSImage(cgImage: cgImage, size: NSSize(width: newW, height: newH))
-        return image
+            let image = NSImage(cgImage: cgImage, size: NSSize(width: newW, height: newH))
+            DispatchQueue.main.async { completion(image) }
+        }
     }
 
     // MARK: - Activate & Terminate
@@ -324,7 +314,6 @@ final class AppDiscoveryService {
         let result = AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowsRef)
         guard result == .success, let axWindows = windowsRef as? [AXUIElement] else { return nil }
 
-        // Match by title
         if !window.name.isEmpty {
             for axWindow in axWindows {
                 var titleRef: CFTypeRef?
@@ -334,7 +323,6 @@ final class AppDiscoveryService {
                 }
             }
         }
-        // Fallback by index
         let idx = window.id % 1000
         if idx >= 0 && idx < axWindows.count { return axWindows[idx] }
         return nil
@@ -352,7 +340,6 @@ final class AppDiscoveryService {
             return
         }
 
-        // Match by title
         if !window.name.isEmpty {
             for axWindow in axWindows {
                 var titleRef: CFTypeRef?
@@ -364,7 +351,6 @@ final class AppDiscoveryService {
             }
         }
 
-        // Fallback: activate by index
         let idx = window.id % 1000
         if idx >= 0 && idx < axWindows.count {
             unminimizeAndRaise(axWindows[idx], pid: window.ownerPid)
@@ -373,7 +359,54 @@ final class AppDiscoveryService {
         }
     }
 
-    /// Unminimize (if needed), raise the AX window, and activate the owning app.
+    /// Activate a specific window by its CGWindowID.
+    /// Cross-references AX windows with CG window list to find and raise the exact window.
+    func activateWindowByCGID(_ targetCGID: CGWindowID, pid: pid_t) {
+        let appElement = AXUIElementCreateApplication(pid)
+        var windowsRef: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowsRef)
+
+        guard result == .success, let axWindows = windowsRef as? [AXUIElement] else {
+            // Fallback: just activate the app
+            if let app = NSRunningApplication(processIdentifier: pid) {
+                app.activate(options: [.activateIgnoringOtherApps])
+            }
+            return
+        }
+
+        // Get CG windows for this pid to cross-reference
+        let cgEntries = getCGWindowsByPid()[pid] ?? []
+
+        for axWindow in axWindows {
+            // Get AX position and size
+            var posRef: CFTypeRef?
+            AXUIElementCopyAttributeValue(axWindow, kAXPositionAttribute as CFString, &posRef)
+            var axPos = CGPoint.zero
+            if let pv = posRef { AXValueGetValue(pv as! AXValue, .cgPoint, &axPos) }
+
+            var sizeRef: CFTypeRef?
+            AXUIElementCopyAttributeValue(axWindow, kAXSizeAttribute as CFString, &sizeRef)
+            var axSize = CGSize.zero
+            if let sv = sizeRef { AXValueGetValue(sv as! AXValue, .cgSize, &axSize) }
+
+            var titleRef: CFTypeRef?
+            AXUIElementCopyAttributeValue(axWindow, kAXTitleAttribute as CFString, &titleRef)
+            let axTitle = (titleRef as? String) ?? ""
+
+            // Match against CG entries to find the one with targetCGID
+            let matched = matchCGWindow(axPos: axPos, axSize: axSize, axTitle: axTitle, cgEntries: cgEntries)
+            if matched?.windowID == targetCGID {
+                unminimizeAndRaise(axWindow, pid: pid)
+                return
+            }
+        }
+
+        // Fallback: activate the app
+        if let app = NSRunningApplication(processIdentifier: pid) {
+            app.activate(options: [.activateIgnoringOtherApps])
+        }
+    }
+
     private func unminimizeAndRaise(_ axWindow: AXUIElement, pid: pid_t) {
         var minRef: CFTypeRef?
         AXUIElementCopyAttributeValue(axWindow, kAXMinimizedAttribute as CFString, &minRef)
