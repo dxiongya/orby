@@ -557,7 +557,13 @@ struct OrbyView: View {
             .scaleEffect(vis ? 1.0 : 0.35)
             .opacity(vis ? 1.0 : 0)
             .animation(jellySpring.delay(Double(i) * 0.015), value: vis)
-            .onTapGesture { tapApp(i) }
+            .onTapGesture {
+                if closeMode == .mainApps {
+                    handleCloseModeTap(at: apps[i].position)
+                } else {
+                    tapApp(i)
+                }
+            }
         }
     }
 
@@ -587,9 +593,12 @@ struct OrbyView: View {
                     .animation(subAppSpring.delay(Double(wIdx) * 0.04), value: vis)
                     .transition(.scale(scale: 0.4).combined(with: .opacity))
                     .onTapGesture {
-                        guard closeMode == .none else { return }
-                        AppDiscoveryService.shared.activateWindow(apps[idx].windows[wIdx])
-                        dismiss()
+                        if closeMode == .subApps {
+                            handleCloseModeTap(at: apps[idx].windows[wIdx].position)
+                        } else if closeMode == .none {
+                            AppDiscoveryService.shared.activateWindow(apps[idx].windows[wIdx])
+                            dismiss()
+                        }
                     }
                 }
             }
