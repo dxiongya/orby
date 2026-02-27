@@ -4,6 +4,7 @@ import ScreenCaptureKit
 
 extension Notification.Name {
     static let escapePressed = Notification.Name("OrbyEscapePressed")
+    static let orbyKeyDown = Notification.Name("OrbyKeyDown")
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -15,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var permissionWindow: NSWindow?
     private var settingsWindow: NSWindow?
     private var onboardingWindow: NSWindow?
+    private var kbGuideWindow: NSWindow?
     private var permissionMonitorTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -105,6 +107,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         onboardingWindow = window
     }
 
+    // MARK: - Keyboard Mode Guide
+
+    private func showKeyboardModeGuide() {
+        if let existing = kbGuideWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let view = KeyboardModeGuideView {
+            DispatchQueue.main.async { [weak self] in
+                self?.kbGuideWindow?.close()
+                self?.kbGuideWindow = nil
+            }
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 460),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Keyboard Mode"
+        window.contentView = NSHostingView(rootView: view)
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        kbGuideWindow = window
+    }
+
     // MARK: - Permission Guide
 
     private func showPermissionGuide() {
@@ -192,6 +226,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onStopRecording: { [weak self] in
                 self?.hotKeyManager.isPaused = false
+            },
+            onShowKBGuide: { [weak self] in
+                self?.showKeyboardModeGuide()
             }
         )
 
@@ -222,11 +259,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupEscapeMonitor() {
         escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard self?.isOverlayVisible == true else { return event }
+
             if event.keyCode == 53 {
-                guard self?.isOverlayVisible == true else { return event }
                 NotificationCenter.default.post(name: .escapePressed, object: nil)
                 return nil
             }
+
+            // Forward key events to OrbyView when in keyboard mode
+            if SettingsManager.shared.keyboardMode {
+                NotificationCenter.default.post(name: .orbyKeyDown, object: event)
+                return nil
+            }
+
             return event
         }
     }

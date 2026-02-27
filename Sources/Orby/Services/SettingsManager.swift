@@ -76,10 +76,14 @@ final class SettingsManager: ObservableObject {
     @Published var previewDelay: Double = 0.45 {
         didSet { UserDefaults.standard.set(previewDelay, forKey: "previewDelay") }
     }
+    @Published var keyboardMode: Bool = false {
+        didSet { UserDefaults.standard.set(keyboardMode, forKey: "keyboardMode") }
+    }
 
     private init() {
         showPreview = UserDefaults.standard.object(forKey: "showPreview") as? Bool ?? true
         previewDelay = UserDefaults.standard.object(forKey: "previewDelay") as? Double ?? 0.45
+        keyboardMode = UserDefaults.standard.object(forKey: "keyboardMode") as? Bool ?? false
         loadHotKeys()
     }
 

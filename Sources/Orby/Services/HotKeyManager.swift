@@ -73,6 +73,19 @@ final class HotKeyManager {
                     DispatchQueue.main.async { manager.onToggle?() }
                     return nil
                 }
+
+                // Quick Launch: Option+Number — consume event to prevent symbol input
+                let qlMask: CGEventFlags = [.maskCommand, .maskAlternate, .maskControl, .maskShift]
+                if flags.intersection(qlMask) == .maskAlternate {
+                    let kc = UInt16(keyCode)
+                    if let slot = QuickLaunchManager.keyMap[kc],
+                       QuickLaunchManager.shared.bindings[slot] != nil {
+                        DispatchQueue.main.async {
+                            QuickLaunchManager.shared.activate(slot: slot)
+                        }
+                        return nil
+                    }
+                }
             }
 
             // Mouse hotkey (right click)

@@ -24,6 +24,7 @@
 		99B0B1678E56027763E2FC6B /* PermissionGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99BDFE4844A71E7700AEA1EF /* PermissionGuideView.swift */; };
 		9E02D5A3C7C089F0E1DF859C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8208FD4DDF8C8DC9E0FEA19 /* SettingsView.swift */; };
 		A19A204AE774F7BD7E5FEA45 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E9E3318D42113683700C498 /* OnboardingView.swift */; };
+		B863E1AE6014D6E6CF24EDCD /* KeyboardModeGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 043DECB30032275D39F91BBE /* KeyboardModeGuideView.swift */; };
 		BAB1BC946F7F924650B160E7 /* CircularLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45949468FD290F954965A005 /* CircularLayoutEngine.swift */; };
 		C4BF42F2C3DDC52B348C7228 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 209EF095529939E084C0E68D /* Assets.xcassets */; };
 		CD4C51F808380FBF64908D2A /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BE4B60391638593B5B9D6A5 /* AppDelegate.swift */; };
@@ -31,6 +32,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		043DECB30032275D39F91BBE /* KeyboardModeGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardModeGuideView.swift; sourceTree = "<group>"; };
 		077405199E92B2D500A3B552 /* SubAppBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubAppBubbleView.swift; sourceTree = "<group>"; };
 		0CEF123612BA576F49DD0DF5 /* TagManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagManager.swift; sourceTree = "<group>"; };
 		209EF095529939E084C0E68D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -86,6 +88,7 @@
 			children = (
 				2A055C15CB02157E1ADD0322 /* AppBubbleView.swift */,
 				F32CE38D9603CF04B1D52205 /* ConnectionLineView.swift */,
+				043DECB30032275D39F91BBE /* KeyboardModeGuideView.swift */,
 				A67CE8CC80A6A0D3F43CBD76 /* MouseCapture.swift */,
 				5E9E3318D42113683700C498 /* OnboardingView.swift */,
 				5F5ABA27FD180C9F0F304952 /* OrbyView.swift */,
@@ -176,7 +179,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					30E80626B9DAED71F34D7D70 = {
 						ProvisioningStyle = Automatic;
@@ -227,6 +230,7 @@
 				BAB1BC946F7F924650B160E7 /* CircularLayoutEngine.swift in Sources */,
 				7A738B672F900298318CD73C /* ConnectionLineView.swift in Sources */,
 				D4520549D10DDA8EC41E0FF1 /* HotKeyManager.swift in Sources */,
+				B863E1AE6014D6E6CF24EDCD /* KeyboardModeGuideView.swift in Sources */,
 				2B3AA736FCA6F966FF47BC85 /* MouseCapture.swift in Sources */,
 				A19A204AE774F7BD7E5FEA45 /* OnboardingView.swift in Sources */,
 				7104071D22815C2A32A908F8 /* OrbyView.swift in Sources */,
@@ -381,7 +385,8 @@
 				CODE_SIGN_ENTITLEMENTS = Orby.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
-				COPY_PHASE_STRIP = NO;
+				COPY_PHASE_STRIP = YES;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -401,6 +406,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.orby.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
+				STRIP_INSTALLED_PRODUCT = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.9;

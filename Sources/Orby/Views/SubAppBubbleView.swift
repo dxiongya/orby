@@ -8,8 +8,11 @@ struct SubAppBubbleView: View {
     let isInCloseMode: Bool
     var tags: [AppTag] = []
     var quickSlot: Int? = nil
+    var kbFocused: Bool = false
+    var kbShortcut: String? = nil
 
     private let size: CGFloat = CircularLayoutEngine.subBubbleRadius * 2
+    private var highlighted: Bool { isHovered || kbFocused }
 
     var body: some View {
         ZStack {
@@ -17,13 +20,19 @@ struct SubAppBubbleView: View {
             Circle()
                 .fill(.ultraThinMaterial)
                 .environment(\.colorScheme, .dark)
-                .shadow(color: .black.opacity(isHovered ? 0.18 : 0.08), radius: isHovered ? 14 : 8, x: 0, y: isHovered ? 6 : 4)
+                .shadow(color: .black.opacity(highlighted ? 0.18 : 0.08), radius: highlighted ? 14 : 8, x: 0, y: highlighted ? 6 : 4)
                 .overlay(
                     Circle()
                         .strokeBorder(
-                            Color.white.opacity(isHovered ? 0.35 : 0.15),
-                            lineWidth: 1
+                            Color.white.opacity(highlighted ? 0.35 : 0.15),
+                            lineWidth: kbFocused ? 2.5 : 1
                         )
+                )
+                .overlay(
+                    kbFocused ? Circle()
+                        .strokeBorder(Color.orange.opacity(0.8), lineWidth: 2.5)
+                        .shadow(color: Color.orange.opacity(0.5), radius: 8)
+                    : nil
                 )
 
             // Parent app icon
@@ -32,7 +41,7 @@ struct SubAppBubbleView: View {
                 .interpolation(.high)
                 .aspectRatio(contentMode: .fit)
                 .frame(width: size * 0.58, height: size * 0.58)
-                .opacity(isHovered ? 1.0 : 0.9)
+                .opacity(highlighted ? 1.0 : 0.9)
 
             // Minimized indicator
             if window.isMinimized {
@@ -79,10 +88,46 @@ struct SubAppBubbleView: View {
                 .offset(y: -2)
             }
         }
-        .scaleEffect(isHovered ? 1.2 : 1.0)
-        // Quick launch slot badge
+        .scaleEffect(highlighted ? 1.2 : 1.0)
+        // Keyboard shortcut badge — keycap style
+        .overlay(alignment: .topLeading) {
+            if let key = kbShortcut, !isInCloseMode {
+                let isSpace = key == "␣"
+                Text(isSpace ? "Space" : key)
+                    .font(.system(size: isSpace ? 8 : 10, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, isSpace ? 6 : 4)
+                    .padding(.vertical, isSpace ? 2.5 : 3)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: isSpace
+                                        ? [Color.orange, Color.orange.opacity(0.6)]
+                                        : [Color(white: 0.38), Color(white: 0.18)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [Color.white.opacity(0.35), Color.white.opacity(0.08)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ),
+                                lineWidth: 0.5
+                            )
+                    )
+                    .shadow(color: .black.opacity(0.3), radius: 2, y: 1.5)
+                    .offset(x: -3, y: -3)
+            }
+        }
+        // Quick launch slot badge — hide in keyboard mode
         .overlay(alignment: .topTrailing) {
-            if let slot = quickSlot, !isInCloseMode {
+            if let slot = quickSlot, !isInCloseMode, kbShortcut == nil {
                 Text("\(slot)")
                     .font(.system(size: 9, weight: .heavy, design: .rounded))
                     .foregroundColor(.white)
@@ -123,7 +168,7 @@ struct SubAppBubbleView: View {
             }
         }
         .position(x: window.position.x, y: window.position.y)
-        .animation(.spring(response: 0.3, dampingFraction: 0.55), value: isHovered)
+        .animation(.spring(response: 0.3, dampingFraction: 0.55), value: highlighted)
     }
 
     private var closeBadge: some View {

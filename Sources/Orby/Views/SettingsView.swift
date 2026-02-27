@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var newTagColor = "blue"
     var onStartRecording: (() -> Void)?
     var onStopRecording: (() -> Void)?
+    var onShowKBGuide: (() -> Void)?
 
     var body: some View {
         ScrollView {
@@ -33,6 +34,8 @@ struct SettingsView: View {
                     .padding(.horizontal, 16)
 
                 hotkeySection
+                Divider().padding(.horizontal, 16)
+                keyboardModeSection
                 Divider().padding(.horizontal, 16)
                 previewSection
                 Divider().padding(.horizontal, 16)
@@ -125,6 +128,55 @@ struct SettingsView: View {
             Text("Supports keys, right-click & combos. ESC to cancel.")
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+    }
+
+    // MARK: - Keyboard Mode Section
+
+    private var keyboardModeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "keyboard.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                Text("Keyboard Mode")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.primary)
+            }
+
+            Toggle("Pure Keyboard Navigation", isOn: $settings.keyboardMode)
+                .font(.system(size: 13))
+                .onChange(of: settings.keyboardMode) { _ in
+                    if settings.keyboardMode && !UserDefaults.standard.bool(forKey: "kbModeGuideShown") {
+                        UserDefaults.standard.set(true, forKey: "kbModeGuideShown")
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            onShowKBGuide?()
+                        }
+                    }
+                }
+
+            HStack {
+                Text("Orby appears centered. Use arrow keys to navigate, Space to activate, 1-6 for nearby apps.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                Button {
+                    onShowKBGuide?()
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "questionmark.circle")
+                            .font(.system(size: 11))
+                        Text("Guide")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.blue)
+            }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)

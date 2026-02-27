@@ -1,74 +1,69 @@
 import SwiftUI
 
-struct OnboardingView: View {
+struct KeyboardModeGuideView: View {
     @State private var currentStep = 0
     var onFinish: () -> Void
 
     private let steps: [(icon: String, title: String, subtitle: String, keys: String?, detail: String)] = [
         (
-            icon: "circle.grid.3x3.fill",
-            title: "Quick Start",
-            subtitle: "Summon your apps in a circle",
-            keys: "⌥ Tab",
-            detail: "Press the hotkey to open Orby.\nAll running apps appear around your cursor.\nClick any app to switch instantly."
-        ),
-        (
-            icon: "cursorarrow.and.square.on.square.dashed",
-            title: "Navigate & Preview",
-            subtitle: "Hover to explore windows",
-            keys: nil,
-            detail: "Hover an app to expand its windows.\nA live preview appears when you pause.\nPinch to zoom the preview."
-        ),
-        (
-            icon: "bolt.fill",
-            title: "Quick Launch",
-            subtitle: "One key to reach any app",
-            keys: "⌥ 1–9",
-            detail: "Right-click any app or window bubble.\nBind it to ⌥+Number for instant access.\nWorks globally — even outside Orby."
-        ),
-        (
-            icon: "option",
-            title: "Reveal Names",
-            subtitle: "See all window titles at once",
-            keys: "Hold ⌥",
-            detail: "Hold the Option key while Orby is open.\nAll sub-app window names appear instantly.\nRelease to hide them again."
-        ),
-        (
-            icon: "tag.fill",
-            title: "Tag Your Apps",
-            subtitle: "Color-coded labels for fast recognition",
-            keys: nil,
-            detail: "Right-click any bubble and choose a tag.\nOr select \"New Tag...\" to create one inline.\nTags persist across sessions."
-        ),
-        (
-            icon: "xmark.circle.fill",
-            title: "Close Mode",
-            subtitle: "Quickly quit apps or close windows",
-            keys: "Long Press",
-            detail: "Long-press on any bubble to enter close mode.\nBubbles start wobbling — tap to close.\nPress ESC to exit close mode."
-        ),
-        (
             icon: "keyboard.fill",
             title: "Keyboard Mode",
-            subtitle: "Navigate without a mouse",
+            subtitle: "Navigate Orby entirely by keyboard",
+            keys: nil,
+            detail: "Orby appears at the center of your screen.\nNo mouse needed — everything is\ncontrolled with keys."
+        ),
+        (
+            icon: "arrow.left.arrow.right",
+            title: "Navigate Apps",
+            subtitle: "Cycle focus with arrow keys",
+            keys: "← →",
+            detail: "Press ← or → to move focus between apps.\nThe focused app enlarges and\nneighboring apps spread apart."
+        ),
+        (
+            icon: "play.circle.fill",
+            title: "Activate",
+            subtitle: "Space to switch or expand",
+            keys: "Space",
+            detail: "Single-window app → instantly switches to it.\nMulti-window app → expands its windows\ninto sub-window mode."
+        ),
+        (
+            icon: "textformat.123",
+            title: "Number Shortcuts",
+            subtitle: "Jump directly to nearby apps",
+            keys: "1 – 6",
+            detail: "1, 2, 3 → left neighbors (nearest to farthest)\n4, 5, 6 → right neighbors (nearest to farthest)\nEach app shows its number badge."
+        ),
+        (
+            icon: "square.on.square",
+            title: "Sub-window Mode",
+            subtitle: "Same controls, for windows",
             keys: "← → Space 1-6",
-            detail: "Enable in Settings for pure keyboard navigation.\nArrow keys cycle apps, Space activates,\n1-6 jump to neighbors. ESC to go back."
+            detail: "After expanding a multi-window app:\n← → cycles between windows,\nSpace activates, 1-6 jumps to neighbors."
+        ),
+        (
+            icon: "arrow.uturn.backward.circle.fill",
+            title: "Go Back",
+            subtitle: "Escape exits layer by layer",
+            keys: "ESC",
+            detail: "In sub-window mode → back to main apps.\nIn main apps → close Orby.\nJust keep pressing ESC to exit."
         ),
     ]
 
     var body: some View {
         VStack(spacing: 0) {
-            // Logo + Progress dots
+            // Header
             HStack(spacing: 10) {
-                Group {
-                    Image("OrbyLogo")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
+                ZStack {
+                    Circle()
+                        .fill(Color.orange.opacity(0.15))
+                        .frame(width: 28, height: 28)
+                    Image(systemName: "keyboard.fill")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.orange)
                 }
-                .frame(width: 28, height: 28)
 
-                Text("Orby")
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                Text("Keyboard Mode Guide")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundColor(.primary)
 
                 Spacer()
@@ -76,7 +71,7 @@ struct OnboardingView: View {
                 HStack(spacing: 6) {
                     ForEach(0..<steps.count, id: \.self) { i in
                         Circle()
-                            .fill(i == currentStep ? Color.accentColor : Color.primary.opacity(0.15))
+                            .fill(i == currentStep ? Color.orange : Color.primary.opacity(0.15))
                             .frame(width: 6, height: 6)
                             .scaleEffect(i == currentStep ? 1.2 : 1.0)
                             .animation(.spring(response: 0.25, dampingFraction: 0.7), value: currentStep)
@@ -96,7 +91,7 @@ struct OnboardingView: View {
                     Circle()
                         .fill(
                             LinearGradient(
-                                colors: [Color.accentColor.opacity(0.15), Color.accentColor.opacity(0.05)],
+                                colors: [Color.orange.opacity(0.15), Color.orange.opacity(0.05)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
@@ -105,7 +100,7 @@ struct OnboardingView: View {
 
                     Image(systemName: step.icon)
                         .font(.system(size: 30, weight: .medium))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(Color.orange)
                         .symbolRenderingMode(.hierarchical)
                 }
                 .padding(.top, 4)
@@ -122,19 +117,24 @@ struct OnboardingView: View {
 
                 // Key badge
                 if let keys = step.keys {
-                    Text(keys)
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundColor(.primary)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.primary.opacity(0.06))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
+                    HStack(spacing: 6) {
+                        ForEach(keys.components(separatedBy: " ").filter { !$0.isEmpty }, id: \.self) { key in
+                            Text(key)
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundColor(.primary)
+                                .padding(.horizontal, key.count > 2 ? 12 : 10)
+                                .padding(.vertical, 7)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                        .fill(Color.primary.opacity(0.06))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
+                                        )
+                                        .shadow(color: .black.opacity(0.05), radius: 1, y: 1)
                                 )
-                        )
+                        }
+                    }
                 }
 
                 // Detail text
@@ -198,7 +198,7 @@ struct OnboardingView: View {
                         .frame(width: 90, height: 34)
                         .background(
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.accentColor)
+                                .fill(Color.orange)
                         )
                     }
                     .buttonStyle(.plain)
@@ -206,13 +206,13 @@ struct OnboardingView: View {
                     Button {
                         onFinish()
                     } label: {
-                        Text("Get Started")
+                        Text("Got It")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(.white)
-                            .frame(width: 110, height: 34)
+                            .frame(width: 100, height: 34)
                             .background(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.accentColor)
+                                    .fill(Color.orange)
                             )
                     }
                     .buttonStyle(.plain)
@@ -232,6 +232,6 @@ struct OnboardingView: View {
                 .padding(.bottom, 16)
             }
         }
-        .frame(width: 380, height: 440)
+        .frame(width: 380, height: 460)
     }
 }

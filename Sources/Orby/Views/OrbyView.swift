@@ -151,6 +151,13 @@ struct OrbyView: View {
     // Option key state for showing all sub-app labels
     @StateObject private var optionKey = OptionKeyState()
 
+    // Keyboard mode state
+    @ObservedObject private var settings = SettingsManager.shared
+    @State private var kbFocusedApp: Int = 0
+    @State private var kbFocusedSub: Int = 0
+    @State private var kbInSubMode: Bool = false
+    private var isKBMode: Bool { settings.keyboardMode }
+
     var body: some View {
         GeometryReader { geo in
             ZStack {
@@ -225,10 +232,200 @@ struct OrbyView: View {
                 dismissInlineTag()
             } else if closeMode != .none {
                 withAnimation(quickSpring) { closeMode = .none }
+            } else if isKBMode && kbInSubMode {
+                // Keyboard mode: Esc in sub-window mode → back to main apps
+                withAnimation(quickSpring) {
+                    kbInSubMode = false
+                    collapseSubApps()
+                }
             } else {
                 dismiss()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .orbyKeyDown)) { notification in
+            guard let event = notification.object as? NSEvent else { return }
+            handleKeyboardNavigation(event)
+        }
+    }
+
+    // MARK: - Keyboard Navigation
+
+    private func handleKeyboardNavigation(_ event: NSEvent) {
+        guard isKBMode, appeared, !apps.isEmpty else { return }
+
+        let keyCode = event.keyCode
+        switch keyCode {
+        case 123: // Left arrow
+            kbMoveLeft()
+        case 124: // Right arrow
+            kbMoveRight()
+        case 49: // Space
+            kbActivate()
+        case 18...23, 25, 26, 28, 29: // Number keys 1-6 (keyCodes: 18=1, 19=2, 20=3, 21=4, 23=5, 22=6)
+            let numMap: [UInt16: Int] = [18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 22: 6]
+            if let num = numMap[keyCode] {
+                kbActivateShortcut(num)
+            }
+        default:
+            break
+        }
+    }
+
+    private func kbMoveLeft() {
+        withAnimation(quickSpring) {
+            if kbInSubMode {
+                guard let idx = expandedAppIndex, idx < apps.count else { return }
+                let count = apps[idx].windows.count
+                guard count > 0 else { return }
+                kbFocusedSub = (kbFocusedSub - 1 + count) % count
+                hoveredSubAppIndex = kbFocusedSub
+            } else {
+                guard !apps.isEmpty else { return }
+                kbFocusedApp = (kbFocusedApp - 1 + apps.count) % apps.count
+                hoveredAppIndex = kbFocusedApp
+                recalcPushOffsets()
+            }
+        }
+    }
+
+    private func kbMoveRight() {
+        withAnimation(quickSpring) {
+            if kbInSubMode {
+                guard let idx = expandedAppIndex, idx < apps.count else { return }
+                let count = apps[idx].windows.count
+                guard count > 0 else { return }
+                kbFocusedSub = (kbFocusedSub + 1) % count
+                hoveredSubAppIndex = kbFocusedSub
+            } else {
+                guard !apps.isEmpty else { return }
+                kbFocusedApp = (kbFocusedApp + 1) % apps.count
+                hoveredAppIndex = kbFocusedApp
+                recalcPushOffsets()
+            }
+        }
+    }
+
+    private func kbActivate() {
+        if kbInSubMode {
+            // Activate focused sub-window
+            guard let idx = expandedAppIndex, idx < apps.count,
+                  kbFocusedSub < apps[idx].windows.count else { return }
+            AppDiscoveryService.shared.activateWindow(apps[idx].windows[kbFocusedSub])
+            dismiss()
+        } else {
+            guard kbFocusedApp < apps.count else { return }
+            let app = apps[kbFocusedApp]
+            if app.windows.count <= 1 {
+                // Single window — activate directly
+                if app.windows.count == 1 {
+                    AppDiscoveryService.shared.activateWindow(app.windows[0])
+                } else {
+                    AppDiscoveryService.shared.activateApp(app)
+                }
+                dismiss()
+            } else {
+                // Multi-window — expand sub-windows
+                withAnimation(quickSpring) {
+                    switchExpandedApp(to: kbFocusedApp)
+                    kbInSubMode = true
+                    kbFocusedSub = 0
+                    hoveredSubAppIndex = 0
+                }
+            }
+        }
+    }
+
+    private func kbActivateShortcut(_ num: Int) {
+        if kbInSubMode {
+            // In sub-window mode: numbers map to sub-windows relative to focused
+            guard let idx = expandedAppIndex, idx < apps.count else { return }
+            let count = apps[idx].windows.count
+            guard count > 0 else { return }
+            let targetIdx = kbNeighborSub(num: num, focused: kbFocusedSub, count: count)
+            guard let target = targetIdx, target < count else { return }
+            AppDiscoveryService.shared.activateWindow(apps[idx].windows[target])
+            dismiss()
+        } else {
+            // In main app mode: numbers map to apps around focused
+            let targetIdx = kbNeighborApp(num: num, focused: kbFocusedApp, count: apps.count)
+            guard let target = targetIdx, target < apps.count else { return }
+            let app = apps[target]
+            if app.windows.count <= 1 {
+                if app.windows.count == 1 {
+                    AppDiscoveryService.shared.activateWindow(app.windows[0])
+                } else {
+                    AppDiscoveryService.shared.activateApp(app)
+                }
+                dismiss()
+            } else {
+                withAnimation(quickSpring) {
+                    kbFocusedApp = target
+                    hoveredAppIndex = target
+                    switchExpandedApp(to: target)
+                    kbInSubMode = true
+                    kbFocusedSub = 0
+                    hoveredSubAppIndex = 0
+                }
+            }
+        }
+    }
+
+    /// Map number 1-6 to neighbor index around the focused app.
+    /// 1,2,3 = left neighbors (closest to farthest), 4,5,6 = right neighbors
+    private func kbNeighborApp(num: Int, focused: Int, count: Int) -> Int? {
+        guard count > 1 else { return nil }
+        let offset: Int
+        if num <= 3 {
+            offset = -num // 1→-1, 2→-2, 3→-3
+        } else {
+            offset = num - 3 // 4→+1, 5→+2, 6→+3
+        }
+        let target = (focused + offset + count) % count
+        return target == focused ? nil : target
+    }
+
+    /// Map number 1-6 to neighbor sub-window around focused sub-window.
+    private func kbNeighborSub(num: Int, focused: Int, count: Int) -> Int? {
+        guard count > 1 else { return nil }
+        let offset: Int
+        if num <= 3 {
+            offset = -num
+        } else {
+            offset = num - 3
+        }
+        let target = (focused + offset + count) % count
+        return target == focused ? nil : target
+    }
+
+    /// Return the keyboard shortcut label for a main app at index `i`, or nil.
+    private func kbShortcutForApp(at i: Int) -> String? {
+        guard isKBMode, !kbInSubMode, !apps.isEmpty else { return nil }
+        if i == kbFocusedApp { return "␣" } // Space key label for focused
+        let count = apps.count
+        // Check left neighbors: 1,2,3
+        for n in 1...min(3, count - 1) {
+            if (kbFocusedApp - n + count) % count == i { return "\(n)" }
+        }
+        // Check right neighbors: 4,5,6
+        for n in 1...min(3, count - 1) {
+            if (kbFocusedApp + n) % count == i { return "\(n + 3)" }
+        }
+        return nil
+    }
+
+    /// Return the keyboard shortcut label for a sub-window at index `wIdx`, or nil.
+    private func kbShortcutForSub(at wIdx: Int) -> String? {
+        guard isKBMode, kbInSubMode,
+              let idx = expandedAppIndex, idx < apps.count else { return nil }
+        let count = apps[idx].windows.count
+        if wIdx == kbFocusedSub { return "␣" }
+        for n in 1...min(3, count - 1) {
+            if (kbFocusedSub - n + count) % count == wIdx { return "\(n)" }
+        }
+        for n in 1...min(3, count - 1) {
+            if (kbFocusedSub + n) % count == wIdx { return "\(n + 3)" }
+        }
+        return nil
     }
 
     // MARK: - Long Press Detection
@@ -464,13 +661,23 @@ struct OrbyView: View {
             height: h - topInset - bottomInset
         )
 
-        let cursorPos = CGPoint(x: rawX, y: rawY)
+        // Keyboard mode: always center on screen
+        let cursorPos = isKBMode
+            ? CGPoint(x: w / 2, y: h / 2)
+            : CGPoint(x: rawX, y: rawY)
         mousePos = cursorPos
         loadApps(around: cursorPos)
         optionKey.startMonitoring()
-        startRightClickMonitor()
+        if !isKBMode { startRightClickMonitor() }
         withAnimation(jellySpring) { appeared = true }
         animateStaggeredEntrance()
+
+        // Initialize keyboard focus
+        if isKBMode {
+            kbFocusedApp = 0
+            kbInSubMode = false
+            recalcPushOffsets()
+        }
     }
 
     // MARK: - Background
@@ -550,7 +757,9 @@ struct OrbyView: View {
                 offset: offset(for: i),
                 isInCloseMode: closeMode == .mainApps,
                 tags: tagManager.tags(for: apps[i].id),
-                quickSlot: quickLaunch.slot(for: apps[i].id)
+                quickSlot: quickLaunch.slot(for: apps[i].id),
+                kbFocused: isKBMode && !kbInSubMode && kbFocusedApp == i,
+                kbShortcut: kbShortcutForApp(at: i)
             )
             .zIndex(hoveredAppIndex == i ? 100 : 0)
             .offset(x: flyX, y: flyY)
@@ -585,7 +794,9 @@ struct OrbyView: View {
                             let wid = apps[idx].windows[wIdx].cgWindowID
                             return quickLaunch.slot(for: apps[idx].id, cgWindowID: wid > 0 ? wid : nil)
                                 ?? quickLaunch.slot(for: apps[idx].id)
-                        }()
+                        }(),
+                        kbFocused: isKBMode && kbInSubMode && kbFocusedSub == wIdx,
+                        kbShortcut: kbShortcutForSub(at: wIdx)
                     )
                     .zIndex(hoveredSubAppIndex == wIdx ? 100 : 0)
                     .scaleEffect(vis ? 1.0 : 0.01)
@@ -1207,7 +1418,13 @@ struct OrbyView: View {
             var offsets = CircularLayoutEngine.calculatePushOffsets(apps: apps, expandedIndex: idx, center: center)
             CircularLayoutEngine.clampPushOffsets(&offsets, apps: apps, safeBounds: safeBounds)
             pushOffsets = offsets
-        } else { pushOffsets = Array(repeating: .zero, count: apps.count) }
+        } else if isKBMode && !kbInSubMode && kbFocusedApp < apps.count {
+            var offsets = CircularLayoutEngine.calculateKBFocusPushOffsets(apps: apps, focusedIndex: kbFocusedApp)
+            CircularLayoutEngine.clampPushOffsets(&offsets, apps: apps, safeBounds: safeBounds)
+            pushOffsets = offsets
+        } else {
+            pushOffsets = Array(repeating: .zero, count: apps.count)
+        }
     }
 
     private func dismiss() {

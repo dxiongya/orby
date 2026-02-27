@@ -33,8 +33,11 @@ struct AppBubbleView: View {
     let isInCloseMode: Bool
     var tags: [AppTag] = []
     var quickSlot: Int? = nil
+    var kbFocused: Bool = false
+    var kbShortcut: String? = nil
 
     private var size: CGFloat { CircularLayoutEngine.mainBubbleRadius * 2 * app.bubbleScale }
+    private var highlighted: Bool { isHovered || kbFocused }
 
     var body: some View {
         VStack(spacing: 5) {
@@ -43,21 +46,28 @@ struct AppBubbleView: View {
                 Circle()
                     .fill(.ultraThinMaterial)
                     .environment(\.colorScheme, .dark)
-                    .shadow(color: .black.opacity(isHovered ? 0.18 : 0.10), radius: isHovered ? 18 : 12, x: 0, y: isHovered ? 8 : 5)
+                    .shadow(color: .black.opacity(highlighted ? 0.18 : 0.10), radius: highlighted ? 18 : 12, x: 0, y: highlighted ? 8 : 5)
                     .shadow(color: .white.opacity(0.06), radius: 2, x: 0, y: -1)
                     .overlay(
                         Circle()
                             .strokeBorder(
                                 LinearGradient(
                                     colors: [
-                                        Color.white.opacity(isHovered ? 0.35 : 0.2),
-                                        Color.white.opacity(isHovered ? 0.15 : 0.08)
+                                        Color.white.opacity(highlighted ? 0.35 : 0.2),
+                                        Color.white.opacity(highlighted ? 0.15 : 0.08)
                                     ],
                                     startPoint: .top,
                                     endPoint: .bottom
                                 ),
-                                lineWidth: 1
+                                lineWidth: kbFocused ? 2.5 : 1
                             )
+                    )
+                    .overlay(
+                        // Keyboard focus ring
+                        kbFocused ? Circle()
+                            .strokeBorder(Color.accentColor.opacity(0.8), lineWidth: 2.5)
+                            .shadow(color: Color.accentColor.opacity(0.5), radius: 8)
+                        : nil
                     )
 
                 // App icon
@@ -102,10 +112,46 @@ struct AppBubbleView: View {
                     .offset(y: -3)
                 }
             }
-            .scaleEffect(isHovered ? 1.18 : 1.0)
-            // Quick launch slot badge
+            .scaleEffect(highlighted ? 1.18 : 1.0)
+            // Keyboard shortcut badge — keycap style
+            .overlay(alignment: .topLeading) {
+                if let key = kbShortcut, !isInCloseMode {
+                    let isSpace = key == "␣"
+                    Text(isSpace ? "Space" : key)
+                        .font(.system(size: isSpace ? 9 : 11, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, isSpace ? 7 : 5)
+                        .padding(.vertical, isSpace ? 3.5 : 4)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: isSpace
+                                            ? [Color.accentColor, Color.accentColor.opacity(0.6)]
+                                            : [Color(white: 0.38), Color(white: 0.18)],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .strokeBorder(
+                                    LinearGradient(
+                                        colors: [Color.white.opacity(0.35), Color.white.opacity(0.08)],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    ),
+                                    lineWidth: 0.5
+                                )
+                        )
+                        .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
+                        .offset(x: -4, y: -4)
+                }
+            }
+            // Quick launch slot badge — hide in keyboard mode
             .overlay(alignment: .topTrailing) {
-                if let slot = quickSlot, !isInCloseMode {
+                if let slot = quickSlot, !isInCloseMode, kbShortcut == nil {
                     Text("\(slot)")
                         .font(.system(size: 10, weight: .heavy, design: .rounded))
                         .foregroundColor(.white)
@@ -127,8 +173,8 @@ struct AppBubbleView: View {
             }
             .modifier(JellyWobble(isActive: isInCloseMode, seed: app.id.hashValue))
 
-            // Name label — hide in close mode to reduce clutter
-            if !isInCloseMode && (isHovered || isExpanded) {
+            // Name label — show on hover, expand, or keyboard focus
+            if !isInCloseMode && (highlighted || isExpanded) {
                 Text(app.name)
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .foregroundColor(.white.opacity(0.9))
@@ -146,7 +192,7 @@ struct AppBubbleView: View {
             x: app.position.x + offset.x,
             y: app.position.y + offset.y
         )
-        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isHovered)
+        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: highlighted)
         .animation(.spring(response: 0.32, dampingFraction: 0.7), value: offset.x)
         .animation(.spring(response: 0.32, dampingFraction: 0.7), value: offset.y)
         .animation(.easeInOut(duration: 0.2), value: dimLevel)

@@ -239,6 +239,35 @@ struct CircularLayoutEngine {
 
     // MARK: - Push Offsets
 
+    /// Push offsets for keyboard-focused app (gentler than expansion push)
+    static func calculateKBFocusPushOffsets(apps: [AppItem], focusedIndex: Int) -> [CGPoint] {
+        guard focusedIndex >= 0, focusedIndex < apps.count else {
+            return Array(repeating: .zero, count: apps.count)
+        }
+        let focusedApp = apps[focusedIndex]
+        var offsets = Array(repeating: CGPoint.zero, count: apps.count)
+
+        for i in 0..<apps.count {
+            guard i != focusedIndex else { continue }
+            let app = apps[i]
+            let dx = app.position.x - focusedApp.position.x
+            let dy = app.position.y - focusedApp.position.y
+            let distance = sqrt(dx * dx + dy * dy)
+
+            let pushRadius = mainBubbleRadius * 4.5
+            if distance < pushRadius {
+                let pushStrength = max(0, 1 - distance / pushRadius)
+                let pushDistance = pushStrength * 20
+                let dist = max(distance, 1)
+                offsets[i] = CGPoint(
+                    x: (dx / dist) * pushDistance,
+                    y: (dy / dist) * pushDistance
+                )
+            }
+        }
+        return offsets
+    }
+
     /// Calculate push-away offsets for non-expanded apps
     static func calculatePushOffsets(
         apps: [AppItem],

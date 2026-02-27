@@ -75,6 +75,19 @@ Color-code your apps with tags for quick visual recognition.
 
 Long-press any bubble to enter **Close Mode** — all bubbles start wobbling. Tap any wobbling bubble to close that app or window. Press **Escape** to exit without closing anything.
 
+### Keyboard Mode
+
+Enable **Pure Keyboard Navigation** in Settings for a fully mouse-free workflow.
+
+- Orby always appears **centered on screen**
+- **← →** arrow keys cycle focus between apps; the focused app enlarges and pushes neighbors apart
+- **Space** activates the focused app (single window) or expands sub-windows (multi-window)
+- **1–6** jump directly to neighbor apps: 1, 2, 3 = left neighbors, 4, 5, 6 = right neighbors
+- In **sub-window mode**, the same controls (← → Space 1–6) remap to individual windows
+- **Escape** goes back one layer: sub-windows → main apps → close Orby
+
+A built-in guide appears automatically the first time you enable Keyboard Mode. You can re-open it from Settings at any time.
+
 ### Hold Option to Reveal Names
 
 While Orby is open, hold the **Option** key to instantly display all window titles across every app. Release to hide them.
@@ -89,6 +102,15 @@ While Orby is open, hold the **Option** key to instantly display all window titl
 | **Long Press** | Enter Close Mode |
 | **Escape** | Close Orby / Exit Close Mode |
 | **Command + ,** | Open Settings |
+
+### Keyboard Mode
+
+| Key | Action |
+|-----|--------|
+| **← →** | Cycle focus between apps/windows |
+| **Space** | Activate app or expand sub-windows |
+| **1–6** | Jump to neighbor (1-3 left, 4-6 right) |
+| **Escape** | Back one layer / Close Orby |
 
 ### Mouse & Trackpad
 
@@ -140,6 +162,7 @@ Grant them in **System Settings > Privacy & Security**.
 Access via the menu bar icon > **Settings...** or **Cmd + ,**.
 
 - **Hotkey Bindings** — Add, remove, or re-record hotkey combinations (keyboard or mouse + modifiers)
+- **Keyboard Mode** — Enable pure keyboard navigation with built-in usage guide
 - **Window Preview** — Toggle on/off, adjust preview delay
 - **Tag Presets** — Manage color-coded tag categories
 - **Quick Launch** — View and remove Option + Number bindings
