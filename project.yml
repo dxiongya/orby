@@ -14,6 +14,8 @@ settings:
     INFOPLIST_FILE: Info.plist
     CODE_SIGN_ENTITLEMENTS: Orby.entitlements
     LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
+    MARKETING_VERSION: "0.0.5"
+    CURRENT_PROJECT_VERSION: "5"
   configs:
     Release:
       SWIFT_OPTIMIZATION_LEVEL: "-O"
@@ -33,6 +35,9 @@ targets:
         COMBINE_HIDPI_IMAGES: true
     info:
       path: Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
     entitlements:
       path: Orby.entitlements
 schemes:
