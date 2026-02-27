@@ -171,6 +171,9 @@ struct OrbyView: View {
     @State private var subAppDragOriginalIndex: Int? = nil   // original index before reorder
     @State private var closeModeWorkItem: DispatchWorkItem?
     @State private var lastReorderFromIdx: Int? = nil        // anti-oscillation: don't reverse
+    @State private var lastReorderTime: CFTimeInterval = 0   // throttle reorder to ~20Hz
+    @State private var lastReorderPosition: CGPoint = .zero  // skip micro-movements
+    @State private var lastDragPositionTime: CFTimeInterval = 0  // throttle ghost to ~60fps
 
 
     var body: some View {
@@ -238,8 +241,17 @@ struct OrbyView: View {
                     // Handle active drag reorder — free position tracking + slot detection
                     if subAppReorderActive, let dragIdx = subAppDragIndex,
                        let expIdx = expandedAppIndex, expIdx < apps.count {
-                        subAppDragPosition = value.location
-                        handleSubAppDrag(at: value.location, dragIdx: dragIdx, appIdx: expIdx)
+                        let now = CACurrentMediaTime()
+                        // Ghost position at ~60fps — avoids 120Hz+ trackpad flooding OrbyView.body
+                        if now - lastDragPositionTime >= 0.016 {
+                            lastDragPositionTime = now
+                            subAppDragPosition = value.location
+                        }
+                        // Reorder detection at ~20Hz — swaps don't pile up
+                        if now - lastReorderTime >= 0.05 {
+                            lastReorderTime = now
+                            handleSubAppDrag(at: value.location, dragIdx: dragIdx, appIdx: expIdx)
+                        }
                     }
                 }
                 .onEnded { value in
@@ -256,6 +268,9 @@ struct OrbyView: View {
                     subAppReorderActive = false
                     subAppDragOriginalIndex = nil
                     lastReorderFromIdx = nil
+                    lastReorderTime = 0
+                    lastDragPositionTime = 0
+                    lastReorderPosition = .zero
                     cancelLongPress()
 
                     if longPressTriggered {
@@ -1589,6 +1604,7 @@ struct OrbyView: View {
                 }
                 .scaleEffect(1.15)
                 .opacity(0.9)
+                .animation(nil, value: subAppDragPosition)  // zero-lag cursor tracking
                 .position(x: subAppDragPosition.x, y: subAppDragPosition.y)
                 .allowsHitTesting(false)
                 .zIndex(300)
@@ -1602,6 +1618,12 @@ struct OrbyView: View {
         let windows = apps[appIdx].windows
         let count = windows.count
         guard count > 1 else { return }
+
+        // Skip if cursor barely moved since last evaluation (4pt threshold)
+        let mdx = loc.x - lastReorderPosition.x
+        let mdy = loc.y - lastReorderPosition.y
+        guard mdx * mdx + mdy * mdy >= 16 else { return }
+        lastReorderPosition = loc
 
         // Find which slot the cursor is closest to (by Euclidean distance)
         var bestIdx = -1

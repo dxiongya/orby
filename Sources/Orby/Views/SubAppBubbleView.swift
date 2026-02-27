@@ -5,21 +5,27 @@ private struct JellyBounce: ViewModifier {
     let trigger: Int
 
     @State private var phase: CGFloat = 0
+    @State private var bounceWorkItem: DispatchWorkItem?
 
     func body(content: Content) -> some View {
         content
             .scaleEffect(x: 1 + phase * 0.12, y: 1 - phase * 0.10)
             .onChange(of: trigger) { _ in
+                // Cancel any pending bounce-back from a previous rapid trigger
+                bounceWorkItem?.cancel()
+
                 // Kick off the squash
                 withAnimation(.easeOut(duration: 0.06)) {
                     phase = 1
                 }
                 // Bounce back with jelly overshoot
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+                let work = DispatchWorkItem {
                     withAnimation(.spring(response: 0.25, dampingFraction: 0.3)) {
                         phase = 0
                     }
                 }
+                bounceWorkItem = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.06, execute: work)
             }
     }
 }
@@ -229,8 +235,7 @@ struct SubAppBubbleView: View {
             }
         }
         .position(x: window.position.x, y: window.position.y)
-        .animation(.spring(response: 0.2, dampingFraction: 0.75), value: window.position.x)
-        .animation(.spring(response: 0.2, dampingFraction: 0.75), value: window.position.y)
+        .animation(.spring(response: 0.2, dampingFraction: 0.75), value: window.position)
         .animation(.spring(response: 0.2, dampingFraction: 0.7), value: isGrabbed)
         .animation(.spring(response: 0.2, dampingFraction: 0.7), value: isDragging)
         .animation(.spring(response: 0.2, dampingFraction: 0.7), value: isReorderMode)
