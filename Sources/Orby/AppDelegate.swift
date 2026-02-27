@@ -20,6 +20,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var permissionMonitorTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Single instance: quit if another Orby is already running
+        let bundleId = Bundle.main.bundleIdentifier ?? "com.orby.app"
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId)
+        if running.count > 1 {
+            NSApp.terminate(nil)
+            return
+        }
+
         setupStatusBar()
         setupEscapeMonitor()
 
@@ -190,6 +198,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let menu = NSMenu()
+
+        // Version header
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let versionItem = NSMenuItem(title: "Orby v\(version)", action: nil, keyEquivalent: "")
+        versionItem.isEnabled = false
+        menu.addItem(versionItem)
+        menu.addItem(NSMenuItem.separator())
+
         let show = NSMenuItem(title: "Show Orby", action: #selector(toggleOverlay), keyEquivalent: "")
         show.target = self
         menu.addItem(show)
