@@ -1,7 +1,6 @@
 import SwiftUI
 
-private let jellySpring = Animation.spring(response: 0.32, dampingFraction: 0.68)
-private let subAppSpring = Animation.spring(response: 0.35, dampingFraction: 0.5)
+// Speed-independent animations (kept as module-level constants)
 private let softSpring = Animation.spring(response: 0.2, dampingFraction: 0.75)
 private let quickSpring = Animation.spring(response: 0.18, dampingFraction: 0.7)
 private let collapseAnim = Animation.easeOut(duration: 0.12)
@@ -26,10 +25,8 @@ private class OptionKeyState: ObservableObject {
         monitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             let option = event.modifierFlags.contains(.option)
             if self?.isHeld != option {
-                DispatchQueue.main.async {
-                    withAnimation(.easeOut(duration: 0.12)) {
-                        self?.isHeld = option
-                    }
+                withAnimation(.easeOut(duration: 0.12)) {
+                    self?.isHeld = option
                 }
             }
             return event
@@ -153,6 +150,15 @@ struct OrbyView: View {
 
     // Keyboard mode state
     @ObservedObject private var settings = SettingsManager.shared
+
+    // Speed-scaled entrance animations
+    private var jellySpring: Animation {
+        .spring(response: 0.32 / settings.mainAppSpeed, dampingFraction: 0.68)
+    }
+    private var subAppSpring: Animation {
+        .spring(response: 0.35 / settings.subAppSpeed, dampingFraction: 0.5)
+    }
+
     @State private var kbFocusedApp: Int = 0
     @State private var kbFocusedSub: Int = 0
     @State private var kbInSubMode: Bool = false
@@ -660,7 +666,8 @@ struct OrbyView: View {
     }
 
     private func commitInlineTag() {
-        let name = inlineTagText.trimmingCharacters(in: .whitespaces)
+        let rawName = inlineTagText.trimmingCharacters(in: .whitespaces)
+        let name = String(rawName.prefix(30))
         guard !name.isEmpty, let key = inlineTagKey else {
             dismissInlineTag()
             return
@@ -707,7 +714,7 @@ struct OrbyView: View {
 
     private func computeCenter(geoSize: CGSize) {
         let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main!
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else { return }
         let sf = screen.frame
 
         let rawX = mouse.x - sf.origin.x
@@ -831,7 +838,7 @@ struct OrbyView: View {
             .offset(x: flyX, y: flyY)
             .scaleEffect(vis ? 1.0 : 0.35)
             .opacity(vis ? 1.0 : 0)
-            .animation(jellySpring.delay(Double(i) * 0.015), value: vis)
+            .animation(jellySpring.delay(Double(i) * 0.015 / settings.mainAppSpeed), value: vis)
             .onTapGesture {
                 if closeMode == .mainApps {
                     handleCloseModeTap(at: apps[i].position)
@@ -847,10 +854,9 @@ struct OrbyView: View {
     private func subAppBubbles() -> some View {
         Group {
             if let idx = expandedAppIndex, idx < apps.count {
-                // Use window ID as identity so SwiftUI tracks each bubble
-                // across reorders and animates position changes correctly
-                ForEach(apps[idx].windows) { window in
-                    let wIdx = apps[idx].windows.firstIndex(where: { $0.id == window.id }) ?? 0
+                // Use enumerated array with window.id as identity — avoids O(n²) firstIndex lookup
+                ForEach(Array(apps[idx].windows.enumerated()), id: \.element.id) { wIdx, window in
+                    let _ = window // silence unused warning; identity tracked via id
                     let vis = subAppStaggerFlags.indices.contains(wIdx) ? subAppStaggerFlags[wIdx] : false
                     let isDrag = subAppDragIndex == wIdx && subAppReorderActive
                     let isGrab = subAppDragIndex == wIdx && !subAppReorderActive
@@ -876,7 +882,7 @@ struct OrbyView: View {
                     .zIndex(isDrag ? 200 : (hoveredSubAppIndex == wIdx ? 100 : 0))
                     .scaleEffect(vis ? 1.0 : 0.01)
                     .opacity(vis ? 1.0 : 0)
-                    .animation(subAppSpring.delay(Double(wIdx) * 0.04), value: vis)
+                    .animation(subAppSpring.delay(Double(wIdx) * 0.04 / settings.subAppSpeed), value: vis)
                     .transition(.scale(scale: 0.4).combined(with: .opacity))
                     .onTapGesture {
                         if closeMode == .subApps {
@@ -898,8 +904,7 @@ struct OrbyView: View {
         Group {
             if let idx = expandedAppIndex, idx < apps.count,
                hoveredSubAppIndex != nil || optionKey.isHeld {
-                ForEach(apps[idx].windows) { window in
-                    let wIdx = apps[idx].windows.firstIndex(where: { $0.id == window.id }) ?? 0
+                ForEach(Array(apps[idx].windows.enumerated()), id: \.element.id) { wIdx, window in
                     let show = hoveredSubAppIndex == wIdx || (optionKey.isHeld && closeMode == .none)
                     let vis = subAppStaggerFlags.indices.contains(wIdx) ? subAppStaggerFlags[wIdx] : false
                     if show && vis {
@@ -1096,7 +1101,7 @@ struct OrbyView: View {
     private func animateSubAppEntrance(count: Int) {
         subAppStaggerFlags = Array(repeating: false, count: count)
         for i in 0..<count {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.04 + 0.01) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.04 / settings.subAppSpeed + 0.01) {
                 withAnimation(subAppSpring) {
                     if i < subAppStaggerFlags.count { subAppStaggerFlags[i] = true }
                 }
@@ -1105,20 +1110,28 @@ struct OrbyView: View {
     }
 
     private func animateStaggeredEntrance() {
-        for i in staggerFlags.indices {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.008 + 0.01) {
-                withAnimation(jellySpring) {
-                    if i < staggerFlags.count { staggerFlags[i] = true }
-                }
+        // Batch-set all flags in one state update; per-view animation delays
+        // (applied via .animation(jellySpring.delay(...), value:)) handle the stagger
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+            withAnimation(jellySpring) {
+                staggerFlags = Array(repeating: true, count: staggerFlags.count)
             }
         }
     }
+
+    @State private var lastHandledMousePos: CGPoint = .zero
 
     private func handleMouseMove(_ loc: CGPoint) {
         mousePos = loc
 
         // Freeze all hover/switch logic when a sub-app is grabbed or being dragged
         if subAppDragIndex != nil || subAppReorderActive { return }
+
+        // Skip if mouse barely moved (< 3pt) — avoids redundant O(n) scans at 60+ Hz
+        let mdx = loc.x - lastHandledMousePos.x
+        let mdy = loc.y - lastHandledMousePos.y
+        if mdx * mdx + mdy * mdy < 9 { return }
+        lastHandledMousePos = loc
 
         // Freeze all hover logic while inline tag input is active
         if inlineTagKey != nil { return }

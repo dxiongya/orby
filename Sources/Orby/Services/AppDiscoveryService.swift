@@ -83,8 +83,10 @@ final class AppDiscoveryService {
         guard err == .success, let axWindows = windowsRef as? [AXUIElement] else {
             // Fallback: use CG windows directly
             return cgEntries.enumerated().map { (i, cg) in
-                WindowItem(id: Int(cg.windowID), name: cg.name, ownerPid: pid,
+                var w = WindowItem(id: Int(cg.windowID), name: cg.name, ownerPid: pid,
                            windowNumber: Int(cg.windowID), cgWindowID: cg.windowID)
+                w.displayName = WindowItem.computeDisplayName(for: cg.name)
+                return w
             }
         }
 
@@ -109,7 +111,9 @@ final class AppDiscoveryService {
             var sizeRef: CFTypeRef?
             AXUIElementCopyAttributeValue(axWindow, kAXSizeAttribute as CFString, &sizeRef)
             var axSize = CGSize.zero
-            if let sv = sizeRef { AXValueGetValue(sv as! AXValue, .cgSize, &axSize) }
+            if let sv = sizeRef, CFGetTypeID(sv) == AXValueGetTypeID() {
+                AXValueGetValue(sv as! AXValue, .cgSize, &axSize)
+            }
             if axSize.width < Self.minWindowSize || axSize.height < Self.minWindowSize { continue }
 
             // Check minimized state (include in list but mark it)
@@ -131,11 +135,12 @@ final class AppDiscoveryService {
             var posRef: CFTypeRef?
             AXUIElementCopyAttributeValue(axWindow, kAXPositionAttribute as CFString, &posRef)
             var axPos = CGPoint.zero
-            if let pv = posRef { AXValueGetValue(pv as! AXValue, .cgPoint, &axPos) }
+            if let pv = posRef, CFGetTypeID(pv) == AXValueGetTypeID() {
+                AXValueGetValue(pv as! AXValue, .cgPoint, &axPos)
+            }
 
-            // Cross-reference with CG window (excluding already-matched IDs)
-            let available = cgEntries.filter { !matchedCGIDs.contains($0.windowID) }
-            let matched = matchCGWindow(axPos: axPos, axSize: axSize, axTitle: axTitle, cgEntries: available)
+            // Cross-reference with CG window (pass full list; matchCGWindow skips matched IDs)
+            let matched = matchCGWindow(axPos: axPos, axSize: axSize, axTitle: axTitle, cgEntries: cgEntries, excludeIDs: matchedCGIDs)
             if let m = matched { matchedCGIDs.insert(m.windowID) }
 
             // Build window name with smart priority
@@ -161,14 +166,16 @@ final class AppDiscoveryService {
 
             let uniqueID = Int(cgID != 0 ? cgID : UInt32(pid) &* 1000 &+ UInt32(i))
 
-            items.append(WindowItem(
+            var win = WindowItem(
                 id: uniqueID,
                 name: finalName,
                 ownerPid: pid,
                 windowNumber: uniqueID,
                 cgWindowID: cgID,
                 isMinimized: isMinimized
-            ))
+            )
+            win.displayName = WindowItem.computeDisplayName(for: finalName)
+            items.append(win)
         }
 
         // Disambiguate same-name windows
@@ -189,14 +196,14 @@ final class AppDiscoveryService {
         return items
     }
 
-    /// Match AX window to CG window by position+size proximity
+    /// Match AX window to CG window by position+size proximity, skipping already-matched IDs
     private func matchCGWindow(axPos: CGPoint, axSize: CGSize, axTitle: String,
-                               cgEntries: [CGEntry]) -> CGEntry? {
+                               cgEntries: [CGEntry], excludeIDs: Set<CGWindowID> = []) -> CGEntry? {
         if !axTitle.isEmpty {
-            if let m = cgEntries.first(where: { $0.name == axTitle }) { return m }
+            if let m = cgEntries.first(where: { !excludeIDs.contains($0.windowID) && $0.name == axTitle }) { return m }
         }
         let tol: CGFloat = 20
-        for cg in cgEntries {
+        for cg in cgEntries where !excludeIDs.contains(cg.windowID) {
             if abs(cg.bounds.origin.x - axPos.x) < tol
                 && abs(cg.bounds.origin.y - axPos.y) < tol
                 && abs(cg.bounds.size.width - axSize.width) < tol
@@ -209,11 +216,16 @@ final class AppDiscoveryService {
 
     // MARK: - ScreenCaptureKit Window Titles
 
+    /// Minimum interval between SC refreshes to avoid expensive system queries on every overlay open
+    private var lastSCRefresh: Date = .distantPast
+
     /// Non-blocking async refresh — uses cached titles until new ones arrive.
     /// Only calls SCShareableContent when screen recording permission is confirmed,
     /// to avoid triggering the macOS 15 system dialog during normal usage.
     private func refreshSCWindowTitlesAsync() {
         guard CGPreflightScreenCaptureAccess() else { return }
+        guard Date().timeIntervalSince(lastSCRefresh) > 5.0 else { return }
+        lastSCRefresh = Date()
         SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: true) { [weak self] content, _ in
             guard let windows = content?.windows else { return }
             var titles: [CGWindowID: String] = [:]
@@ -264,7 +276,13 @@ final class AppDiscoveryService {
 
     /// Track whether screen capture via CGWindowList is known to work.
     /// Avoids repeated blocking calls that trigger macOS 15 permission dialogs.
-    private var cgCaptureAvailable: Bool?
+    /// Thread-safe access via serial queue.
+    private let captureStateQueue = DispatchQueue(label: "com.orby.capture-state")
+    private var _cgCaptureAvailable: Bool?
+    private var cgCaptureAvailable: Bool? {
+        get { captureStateQueue.sync { _cgCaptureAvailable } }
+        set { captureStateQueue.sync { _cgCaptureAvailable = newValue } }
+    }
 
     /// Capture window preview asynchronously on a background thread.
     /// Actually downscales the image to avoid loading full-resolution bitmaps into SwiftUI.
@@ -368,6 +386,7 @@ final class AppDiscoveryService {
         var closeRef: CFTypeRef?
         AXUIElementCopyAttributeValue(axWindow, kAXCloseButtonAttribute as CFString, &closeRef)
         if let closeButton = closeRef {
+            // closeButton is a CFTypeRef; AXUIElement is toll-free bridged
             AXUIElementPerformAction(closeButton as! AXUIElement, kAXPressAction as CFString)
         }
     }
@@ -378,6 +397,7 @@ final class AppDiscoveryService {
         let result = AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowsRef)
         guard result == .success, let axWindows = windowsRef as? [AXUIElement] else { return nil }
 
+        // 1. Try matching by name (exact title match)
         if !window.name.isEmpty {
             for axWindow in axWindows {
                 var titleRef: CFTypeRef?
@@ -387,8 +407,35 @@ final class AppDiscoveryService {
                 }
             }
         }
-        let idx = window.id % 1000
-        if idx >= 0 && idx < axWindows.count { return axWindows[idx] }
+
+        // 2. Try matching by cgWindowID via position/size cross-reference
+        if window.cgWindowID > 0 {
+            let cgEntries = getCGWindowsByPid()[window.ownerPid] ?? []
+            if let targetCG = cgEntries.first(where: { $0.windowID == window.cgWindowID }) {
+                let tol: CGFloat = 20
+                for axWindow in axWindows {
+                    var posRef: CFTypeRef?
+                    AXUIElementCopyAttributeValue(axWindow, kAXPositionAttribute as CFString, &posRef)
+                    var axPos = CGPoint.zero
+                    if let pv = posRef, CFGetTypeID(pv) == AXValueGetTypeID() {
+                        AXValueGetValue(pv as! AXValue, .cgPoint, &axPos)
+                    }
+                    var sizeRef: CFTypeRef?
+                    AXUIElementCopyAttributeValue(axWindow, kAXSizeAttribute as CFString, &sizeRef)
+                    var axSize = CGSize.zero
+                    if let sv = sizeRef, CFGetTypeID(sv) == AXValueGetTypeID() {
+                        AXValueGetValue(sv as! AXValue, .cgSize, &axSize)
+                    }
+                    if abs(axPos.x - targetCG.bounds.origin.x) < tol
+                        && abs(axPos.y - targetCG.bounds.origin.y) < tol
+                        && abs(axSize.width - targetCG.bounds.size.width) < tol
+                        && abs(axSize.height - targetCG.bounds.size.height) < tol {
+                        return axWindow
+                    }
+                }
+            }
+        }
+
         return nil
     }
 
@@ -446,12 +493,16 @@ final class AppDiscoveryService {
             var posRef: CFTypeRef?
             AXUIElementCopyAttributeValue(axWindow, kAXPositionAttribute as CFString, &posRef)
             var axPos = CGPoint.zero
-            if let pv = posRef { AXValueGetValue(pv as! AXValue, .cgPoint, &axPos) }
+            if let pv = posRef, CFGetTypeID(pv) == AXValueGetTypeID() {
+                AXValueGetValue(pv as! AXValue, .cgPoint, &axPos)
+            }
 
             var sizeRef: CFTypeRef?
             AXUIElementCopyAttributeValue(axWindow, kAXSizeAttribute as CFString, &sizeRef)
             var axSize = CGSize.zero
-            if let sv = sizeRef { AXValueGetValue(sv as! AXValue, .cgSize, &axSize) }
+            if let sv = sizeRef, CFGetTypeID(sv) == AXValueGetTypeID() {
+                AXValueGetValue(sv as! AXValue, .cgSize, &axSize)
+            }
 
             var titleRef: CFTypeRef?
             AXUIElementCopyAttributeValue(axWindow, kAXTitleAttribute as CFString, &titleRef)

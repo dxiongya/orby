@@ -82,12 +82,20 @@ final class SettingsManager: ObservableObject {
     @Published var subAppSortClockwise: Bool = true {
         didSet { UserDefaults.standard.set(subAppSortClockwise, forKey: "subAppSortClockwise") }
     }
+    @Published var mainAppSpeed: Double = 1.6 {
+        didSet { UserDefaults.standard.set(mainAppSpeed, forKey: "mainAppSpeed") }
+    }
+    @Published var subAppSpeed: Double = 1.6 {
+        didSet { UserDefaults.standard.set(subAppSpeed, forKey: "subAppSpeed") }
+    }
 
     private init() {
         showPreview = UserDefaults.standard.object(forKey: "showPreview") as? Bool ?? true
         previewDelay = UserDefaults.standard.object(forKey: "previewDelay") as? Double ?? 0.45
         keyboardMode = UserDefaults.standard.object(forKey: "keyboardMode") as? Bool ?? false
         subAppSortClockwise = UserDefaults.standard.object(forKey: "subAppSortClockwise") as? Bool ?? true
+        mainAppSpeed = UserDefaults.standard.object(forKey: "mainAppSpeed") as? Double ?? 1.6
+        subAppSpeed = UserDefaults.standard.object(forKey: "subAppSpeed") as? Double ?? 1.6
         loadHotKeys()
     }
 

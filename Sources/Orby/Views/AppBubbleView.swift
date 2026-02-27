@@ -1,13 +1,14 @@
 import SwiftUI
 
-/// Organic jelly wobble — snappy frequency, per-bubble unique phase
+/// Organic jelly wobble — uses 30fps periodic timeline to avoid per-frame body evaluation
+/// at display refresh rate (vs .animation which fires at 60-120fps).
 struct JellyWobble: ViewModifier {
     let isActive: Bool
     let seed: Int
 
     func body(content: Content) -> some View {
         if isActive {
-            TimelineView(.animation) { context in
+            TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { context in
                 let t = context.date.timeIntervalSinceReferenceDate
                 let phase = Double(abs(seed) % 1000) / 1000.0 * .pi * 2
                 // ~1.5 Hz rotation, ±2.5°

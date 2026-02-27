@@ -39,6 +39,8 @@ struct SettingsView: View {
                 Divider().padding(.horizontal, 16)
                 previewSection
                 Divider().padding(.horizontal, 16)
+                animationSpeedSection
+                Divider().padding(.horizontal, 16)
                 subWindowOrderSection
                 Divider().padding(.horizontal, 16)
                 tagPresetsSection
@@ -213,6 +215,51 @@ struct SettingsView: View {
                         .controlSize(.small)
                 }
             }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+    }
+
+    // MARK: - Animation Speed Section
+
+    private var animationSpeedSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "bolt.horizontal.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                Text("Animation Speed")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.primary)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Main App").font(.system(size: 12)).foregroundColor(.secondary)
+                    Spacer()
+                    Text(String(format: "%.1fx", settings.mainAppSpeed))
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
+                Slider(value: $settings.mainAppSpeed, in: 0.5...3.0, step: 0.1)
+                    .controlSize(.small)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Sub-Window").font(.system(size: 12)).foregroundColor(.secondary)
+                    Spacer()
+                    Text(String(format: "%.1fx", settings.subAppSpeed))
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
+                Slider(value: $settings.subAppSpeed, in: 0.5...3.0, step: 0.1)
+                    .controlSize(.small)
+            }
+
+            Text("Higher value = faster entrance animation")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
@@ -448,6 +495,9 @@ struct SettingsView: View {
                     || modFlags.contains(.function)
 
                 if keyCode == 53 && !hasModifier { stopRecording(); return nil }
+                // Require at least one modifier for keyboard hotkeys to avoid
+                // intercepting normal typing system-wide
+                guard hasModifier else { return nil }
 
                 let combo = HotKeyCombination(keyCode: keyCode, modifiers: cgFlags(from: modFlags))
                 settings.addHotKey(combo)

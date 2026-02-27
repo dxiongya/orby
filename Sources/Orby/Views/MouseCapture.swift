@@ -43,12 +43,14 @@ class _MouseCaptureNSView: NSView {
         let flipped = CGPoint(x: localMouse.x, y: bounds.height - localMouse.y)
         let size = CGSize(width: bounds.width, height: bounds.height)
 
+        #if DEBUG
         NSLog("[MouseCapture] screen=(%.0f,%.0f) window=(%.0f,%.0f) local=(%.0f,%.0f) flipped=(%.0f,%.0f) bounds=%.0fx%.0f",
               screenMouse.x, screenMouse.y,
               windowMouse.x, windowMouse.y,
               localMouse.x, localMouse.y,
               flipped.x, flipped.y,
               bounds.width, bounds.height)
+        #endif
 
         DispatchQueue.main.async {
             self.onCaptured?(flipped, size)

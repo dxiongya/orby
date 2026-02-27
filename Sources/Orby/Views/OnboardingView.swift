@@ -48,6 +48,13 @@ struct OnboardingView: View {
             detail: "Long-press on any bubble to enter close mode.\nBubbles start wobbling — tap to close.\nPress ESC to exit close mode."
         ),
         (
+            icon: "arrow.up.arrow.down.circle.fill",
+            title: "Reorder Windows",
+            subtitle: "Drag sub-windows to rearrange",
+            keys: nil,
+            detail: "Long-press a sub-window and drag to reorder.\nChoose clockwise or counter-clockwise in Settings.\nAdjust animation speed to your liking."
+        ),
+        (
             icon: "keyboard.fill",
             title: "Keyboard Mode",
             subtitle: "Navigate without a mouse",

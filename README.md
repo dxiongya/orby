@@ -71,6 +71,13 @@ Color-code your apps with tags for quick visual recognition.
 - Create custom tags via right-click or Settings
 - Tags persist across sessions
 
+### Sub-Window Reorder
+
+Long-press a sub-window bubble and drag to rearrange the order. Your custom order persists until the app is relaunched.
+
+- Choose **clockwise** or **counter-clockwise** layout direction in Settings
+- New windows automatically appear at the end of the arc
+
 ### Close Mode
 
 Long-press any bubble to enter **Close Mode** — all bubbles start wobbling. Tap any wobbling bubble to close that app or window. Press **Escape** to exit without closing anything.
@@ -120,6 +127,7 @@ While Orby is open, hold the **Option** key to instantly display all window titl
 | **Click** | Switch to app or window |
 | **Right-click** | Context menu (tag / quick launch) |
 | **Long press** | Enter Close Mode |
+| **Long press + Drag** (sub-window) | Reorder sub-windows |
 | **Pinch** | Zoom window preview |
 
 ## Installation
@@ -164,6 +172,8 @@ Access via the menu bar icon > **Settings...** or **Cmd + ,**.
 - **Hotkey Bindings** — Add, remove, or re-record hotkey combinations (keyboard or mouse + modifiers)
 - **Keyboard Mode** — Enable pure keyboard navigation with built-in usage guide
 - **Window Preview** — Toggle on/off, adjust preview delay
+- **Animation Speed** — Separate sliders for main app and sub-window entrance animations (0.5x – 3.0x)
+- **Sub-Window Order** — Choose clockwise or counter-clockwise layout; drag to reorder
 - **Tag Presets** — Manage color-coded tag categories
 - **Quick Launch** — View and remove Option + Number bindings
 

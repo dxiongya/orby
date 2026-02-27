@@ -39,6 +39,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Auto-reset stale TCC entries left over from a previous code signature.
+        // After ad-hoc re-signing (new build / release), macOS keeps the old entry
+        // but it no longer matches → user would have to manually delete then re-add.
+        // tccutil reset clears the stale entry so "Grant" works in one step.
+        resetStaleTCCEntries(hasAX: hasAX)
+
         // Only probe SCShareableContent if user has previously granted screen recording.
         // On first launch, calling SCShareableContent triggers the system dialog immediately,
         // which is confusing — the user should see our permission guide first and click
@@ -62,6 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startApp() {
         UserDefaults.standard.set(true, forKey: "srPreviouslyGranted")
+        UserDefaults.standard.set(true, forKey: "axPreviouslyGranted")
         setupHotKey()
         QuickLaunchManager.shared.startMonitoring()
         closePermissionGuide()
@@ -77,7 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Periodically check if accessibility was revoked at runtime.
     /// Gracefully tear down the event tap and re-show the permission guide.
     private func startPermissionMonitor() {
-        permissionMonitorTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+        permissionMonitorTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
             if !HotKeyManager.hasAccessibilityPermission {
                 self?.permissionMonitorTimer?.invalidate()
                 self?.permissionMonitorTimer = nil
@@ -147,6 +154,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         kbGuideWindow = window
     }
 
+    // MARK: - TCC Reset
+
+    /// Clear stale TCC entries from a previous code signature so the user
+    /// can grant permissions in one click instead of delete-then-re-add.
+    private func resetStaleTCCEntries(hasAX: Bool) {
+        let bundleId = Bundle.main.bundleIdentifier ?? "com.orby.app"
+        let hadAX = UserDefaults.standard.bool(forKey: "axPreviouslyGranted")
+        let hadSR = UserDefaults.standard.bool(forKey: "srPreviouslyGranted")
+        let hasSR = CGPreflightScreenCaptureAccess()
+
+        if hadAX && !hasAX {
+            runTCCUtilReset(service: "Accessibility", bundleId: bundleId)
+        }
+        if hadSR && !hasSR {
+            runTCCUtilReset(service: "ScreenCapture", bundleId: bundleId)
+        }
+    }
+
+    private func runTCCUtilReset(service: String, bundleId: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        process.arguments = ["reset", service, bundleId]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            // tccutil may not be available or may fail — safe to ignore
+        }
+    }
+
     // MARK: - Permission Guide
 
     private func showPermissionGuide() {
@@ -173,7 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.contentView = NSHostingView(rootView: guideView)
         window.center()
         window.isReleasedWhenClosed = false
-        window.level = .floating
+        window.level = .normal
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         permissionWindow = window
@@ -308,7 +347,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isOverlayVisible = true
 
         let mouseLocation = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) }) ?? NSScreen.main!
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouseLocation, $0.frame, false) }) ?? NSScreen.main else { return }
 
         let panel = OverlayPanel(screen: screen)
         let binding = Binding<Bool>(

@@ -254,24 +254,10 @@ struct SubAppBubbleView: View {
     }
 
     static func displayName(for title: String) -> String {
-        guard !title.isEmpty else { return "Window" }
-
-        for sep in [" — ", "—", " \u{2013} ", "\u{2013}"] {
-            if let range = title.range(of: sep, options: .backwards) {
-                let workspace = String(title[range.upperBound...]).trimmingCharacters(in: .whitespaces)
-                if !workspace.isEmpty { return workspace }
-            }
-        }
-
-        if let range = title.range(of: " - ", options: .backwards) {
-            let workspace = String(title[range.upperBound...]).trimmingCharacters(in: .whitespaces)
-            if !workspace.isEmpty { return workspace }
-        }
-
-        return title
+        WindowItem.computeDisplayName(for: title)
     }
 
     private var displayName: String {
-        Self.displayName(for: window.name)
+        window.displayName.isEmpty ? WindowItem.computeDisplayName(for: window.name) : window.displayName
     }
 }
