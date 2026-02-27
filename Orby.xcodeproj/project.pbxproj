@@ -24,6 +24,7 @@
 		99B0B1678E56027763E2FC6B /* PermissionGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99BDFE4844A71E7700AEA1EF /* PermissionGuideView.swift */; };
 		9E02D5A3C7C089F0E1DF859C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8208FD4DDF8C8DC9E0FEA19 /* SettingsView.swift */; };
 		A19A204AE774F7BD7E5FEA45 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E9E3318D42113683700C498 /* OnboardingView.swift */; };
+		A948BD6594D946CA272D33F8 /* SubAppOrderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC74BAB0D9487AB43E7A8FFD /* SubAppOrderManager.swift */; };
 		B863E1AE6014D6E6CF24EDCD /* KeyboardModeGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 043DECB30032275D39F91BBE /* KeyboardModeGuideView.swift */; };
 		BAB1BC946F7F924650B160E7 /* CircularLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45949468FD290F954965A005 /* CircularLayoutEngine.swift */; };
 		C4BF42F2C3DDC52B348C7228 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 209EF095529939E084C0E68D /* Assets.xcassets */; };
@@ -52,6 +53,7 @@
 		A67CE8CC80A6A0D3F43CBD76 /* MouseCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MouseCapture.swift; sourceTree = "<group>"; };
 		C50B4AA4C6E65FCDC819BA18 /* OrbyLogo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = OrbyLogo.png; sourceTree = "<group>"; };
 		C8D7EF0001E800821DC74F56 /* AppTag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTag.swift; sourceTree = "<group>"; };
+		CC74BAB0D9487AB43E7A8FFD /* SubAppOrderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubAppOrderManager.swift; sourceTree = "<group>"; };
 		E8208FD4DDF8C8DC9E0FEA19 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		EB2B28C9FA1D85358C1FCE17 /* AppModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModels.swift; sourceTree = "<group>"; };
 		F32CE38D9603CF04B1D52205 /* ConnectionLineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionLineView.swift; sourceTree = "<group>"; };
@@ -115,6 +117,7 @@
 				23BAC1A789FDEE9E9894023F /* HotKeyManager.swift */,
 				5C33177F00C039B9032B63F7 /* QuickLaunchManager.swift */,
 				453B1C124E5EA7CA86E2BABF /* SettingsManager.swift */,
+				CC74BAB0D9487AB43E7A8FFD /* SubAppOrderManager.swift */,
 				0CEF123612BA576F49DD0DF5 /* TagManager.swift */,
 			);
 			path = Services;
@@ -240,6 +243,7 @@
 				39B7BC87B90732BA17AC0222 /* SettingsManager.swift in Sources */,
 				9E02D5A3C7C089F0E1DF859C /* SettingsView.swift in Sources */,
 				8ADDDA130EB884DF7EE56EB3 /* SubAppBubbleView.swift in Sources */,
+				A948BD6594D946CA272D33F8 /* SubAppOrderManager.swift in Sources */,
 				6839F232DD5688558A1A06F7 /* TagManager.swift in Sources */,
 				67DFE499D49ADBE40985A6ED /* main.swift in Sources */,
 			);
@@ -285,6 +289,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 5;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -305,6 +310,7 @@
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 0.0.5;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -386,6 +392,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = YES;
+				CURRENT_PROJECT_VERSION = 5;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -401,6 +408,7 @@
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 0.0.5;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.orby.app;

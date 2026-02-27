@@ -35,6 +35,7 @@ struct WindowItem: Identifiable, Equatable {
     // Layout properties
     var position: CGPoint = .zero
     var angle: Double = 0
+    var ringIndex: Int = 0
     // Preview image (captured on hover)
     var previewImage: NSImage?
 
@@ -42,6 +43,7 @@ struct WindowItem: Identifiable, Equatable {
         lhs.id == rhs.id
         && lhs.position == rhs.position
         && lhs.angle == rhs.angle
+        && lhs.ringIndex == rhs.ringIndex
         && (lhs.previewImage != nil) == (rhs.previewImage != nil)
     }
 }

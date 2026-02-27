@@ -173,27 +173,107 @@ struct CircularLayoutEngine {
         }
     }
 
-    /// Layout sub-apps (windows) in an arc around the parent app.
-    /// Uses available arc so sub-apps stay on screen. Fan is centered on parentAngle.
+    // MARK: - Sub-App Layout Constants
+
+    /// Max single-ring radius — keeps hover path from parent to sub-app reachable
+    static let subAppMaxRingRadius: CGFloat = 130
+    /// Gap between concentric rings
+    static let subAppRingGap: CGFloat = 68
+    /// Comfortable spacing between sub-app bubbles along the arc
+    private static let subAppBubbleSpacing: CGFloat = subBubbleRadius * 2 + 10
+    /// Max fan angle (216 degrees)
+    private static let subAppMaxFanAngle: Double = .pi * 1.2
+
+    /// Max windows that fit in a single ring at max radius
+    private static var maxPerRing: Int {
+        let arcLength = subAppMaxRingRadius * CGFloat(subAppMaxFanAngle)
+        return max(1, Int(arcLength / subAppBubbleSpacing))  // ~7
+    }
+
+    /// Layout sub-apps in concentric arcs around the parent app.
+    /// Single ring with adaptive radius up to maxRingRadius, then splits into multiple rings.
     static func layoutSubApps(
         _ windows: inout [WindowItem],
         parentPosition: CGPoint,
         parentAngle: Double,
         center: CGPoint,
-        safeBounds: CGRect
+        safeBounds: CGRect,
+        clockwise: Bool = true
     ) {
         let count = windows.count
         guard count > 0 else { return }
 
         let margin = subBubbleRadius + 12
-        let arc = computeAvailableArc(center: parentPosition, radius: subAppArcRadius, margin: margin, safeBounds: safeBounds)
+        let perRing = maxPerRing
 
-        let minAngularGap = Double(subBubbleRadius * 2 + 8) / Double(subAppArcRadius)
+        if count <= perRing {
+            // Single ring — adaptive radius capped at max
+            let radius = adaptiveRadius(for: count)
+            layoutRing(
+                &windows, range: 0..<count,
+                radius: radius,
+                parentPosition: parentPosition,
+                parentAngle: parentAngle,
+                safeBounds: safeBounds,
+                margin: margin,
+                clockwise: clockwise,
+                ringIndex: 0
+            )
+        } else {
+            // Multiple rings — distribute evenly, inner ring first
+            let ringCount = (count + perRing - 1) / perRing
+            var idx = 0
+            for ring in 0..<ringCount {
+                let remaining = count - idx
+                let ringsLeft = ringCount - ring
+                let n = remaining / ringsLeft  // distribute evenly
+                let ringEnd = idx + n
+
+                let radius = adaptiveRadius(for: n) + CGFloat(ring) * subAppRingGap
+                layoutRing(
+                    &windows, range: idx..<ringEnd,
+                    radius: radius,
+                    parentPosition: parentPosition,
+                    parentAngle: parentAngle,
+                    safeBounds: safeBounds,
+                    margin: margin,
+                    clockwise: clockwise,
+                    ringIndex: ring
+                )
+                idx = ringEnd
+            }
+        }
+    }
+
+    /// Adaptive radius for N sub-apps, capped at maxRingRadius
+    private static func adaptiveRadius(for count: Int) -> CGFloat {
+        guard count > 1 else { return subAppArcRadius }
+        let neededArc = CGFloat(count - 1) * subAppBubbleSpacing
+        let minRadius = neededArc / CGFloat(subAppMaxFanAngle)
+        return max(subAppArcRadius, min(minRadius, subAppMaxRingRadius))
+    }
+
+    /// Layout a single ring of sub-apps in an arc
+    private static func layoutRing(
+        _ windows: inout [WindowItem],
+        range: Range<Int>,
+        radius: CGFloat,
+        parentPosition: CGPoint,
+        parentAngle: Double,
+        safeBounds: CGRect,
+        margin: CGFloat,
+        clockwise: Bool,
+        ringIndex: Int
+    ) {
+        let count = range.count
+        guard count > 0 else { return }
+
+        let arc = computeAvailableArc(center: parentPosition, radius: radius, margin: margin, safeBounds: safeBounds)
+
+        let minAngularGap = Double(subAppBubbleSpacing) / Double(radius)
         let neededAngle = Double(count - 1) * minAngularGap
-        let maxFanAngle = Double.pi * 1.2
-        let fanAngle = count == 1 ? 0 : min(maxFanAngle, min(arc.arcSpan * 0.9, neededAngle))
+        let fanAngle = count == 1 ? 0 : min(subAppMaxFanAngle, min(arc.arcSpan * 0.9, neededAngle))
 
-        // Center fan on parentAngle, clamped within available arc
         let arcEnd = arc.startAngle + arc.arcSpan
         var fanCenter = parentAngle
         let halfFan = fanAngle / 2
@@ -203,19 +283,21 @@ struct CircularLayoutEngine {
 
         let fanStart = fanCenter - halfFan
 
-        for i in 0..<count {
+        for (localIdx, globalIdx) in zip(0..<count, range) {
             let angle: Double
             if count == 1 {
                 angle = fanCenter
             } else {
-                angle = fanStart + fanAngle * Double(i) / Double(count - 1)
+                let t = clockwise ? Double(localIdx) : Double(count - 1 - localIdx)
+                angle = fanStart + fanAngle * t / Double(count - 1)
             }
 
-            windows[i].position = CGPoint(
-                x: parentPosition.x + subAppArcRadius * cos(angle),
-                y: parentPosition.y + subAppArcRadius * sin(angle)
+            windows[globalIdx].position = CGPoint(
+                x: parentPosition.x + radius * cos(angle),
+                y: parentPosition.y + radius * sin(angle)
             )
-            windows[i].angle = angle
+            windows[globalIdx].angle = angle
+            windows[globalIdx].ringIndex = ringIndex
         }
     }
 

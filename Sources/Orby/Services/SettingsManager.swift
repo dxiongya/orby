@@ -79,11 +79,15 @@ final class SettingsManager: ObservableObject {
     @Published var keyboardMode: Bool = false {
         didSet { UserDefaults.standard.set(keyboardMode, forKey: "keyboardMode") }
     }
+    @Published var subAppSortClockwise: Bool = true {
+        didSet { UserDefaults.standard.set(subAppSortClockwise, forKey: "subAppSortClockwise") }
+    }
 
     private init() {
         showPreview = UserDefaults.standard.object(forKey: "showPreview") as? Bool ?? true
         previewDelay = UserDefaults.standard.object(forKey: "previewDelay") as? Double ?? 0.45
         keyboardMode = UserDefaults.standard.object(forKey: "keyboardMode") as? Bool ?? false
+        subAppSortClockwise = UserDefaults.standard.object(forKey: "subAppSortClockwise") as? Bool ?? true
         loadHotKeys()
     }
 

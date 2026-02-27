@@ -158,6 +158,15 @@ struct OrbyView: View {
     @State private var kbInSubMode: Bool = false
     private var isKBMode: Bool { settings.keyboardMode }
 
+    // Sub-app drag reorder state
+    @State private var subAppDragIndex: Int? = nil
+    @State private var subAppReorderActive: Bool = false
+    @State private var subAppDragPosition: CGPoint = .zero  // free-drag cursor position
+    @State private var subAppDragOriginalIndex: Int? = nil   // original index before reorder
+    @State private var closeModeWorkItem: DispatchWorkItem?
+    @State private var lastReorderFromIdx: Int? = nil        // anti-oscillation: don't reverse
+
+
     var body: some View {
         GeometryReader { geo in
             ZStack {
@@ -166,8 +175,10 @@ struct OrbyView: View {
                 if center.x >= 0 && appeared {
                     connectionLines()
                     subAppConnectionLines()
+                    dragConnectionLine()
                     mainAppBubbles()
                     subAppBubbles()
+                    dragGhostBubble()
                     subAppLabels()
                     windowPreview()
                     closeModeHint()
@@ -187,24 +198,58 @@ struct OrbyView: View {
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
                     if inlineTagKey != nil && isClickOnInlineTag(value.location) { return }
-                    handleMouseMove(value.location)
                     if !isDragging {
+                        // First press — use startLocation (where finger first touched),
+                        // NOT value.location which may have already moved if user is fast
                         isDragging = true
-                        longPressStartPos = value.location
-                        // Don't start long press if mouse is over the preview card
-                        if closeMode == .none && !isMouseOverPreview(value.location) {
-                            startLongPressDetection(at: value.location)
+                        longPressStartPos = value.startLocation
+                        if closeMode == .none && !isMouseOverPreview(value.startLocation) {
+                            startLongPressDetection(at: value.startLocation)
                         }
                     } else if let start = longPressStartPos {
+                        handleMouseMove(value.location)
                         let dx = value.location.x - start.x
                         let dy = value.location.y - start.y
-                        if sqrt(dx * dx + dy * dy) > 8 {
-                            cancelLongPress()
+                        let moved = sqrt(dx * dx + dy * dy)
+
+                        if moved > 2 {
+                            // Check if we should enter reorder mode
+                            if subAppDragIndex != nil && !subAppReorderActive {
+                                subAppReorderActive = true
+                                lastReorderFromIdx = nil
+                                subAppDragOriginalIndex = subAppDragIndex
+                                subAppDragPosition = value.location
+                                closeModeWorkItem?.cancel()
+                                closeModeWorkItem = nil
+                                longPressTriggered = true // prevent tap on release
+                                clearPreviewNow()
+                            } else if subAppDragIndex == nil {
+                                cancelLongPress()
+                            }
                         }
+                    }
+
+                    // Handle active drag reorder — free position tracking + slot detection
+                    if subAppReorderActive, let dragIdx = subAppDragIndex,
+                       let expIdx = expandedAppIndex, expIdx < apps.count {
+                        subAppDragPosition = value.location
+                        handleSubAppDrag(at: value.location, dragIdx: dragIdx, appIdx: expIdx)
                     }
                 }
                 .onEnded { value in
                     isDragging = false
+
+                    // Finish drag reorder — accept current order as-is
+                    if subAppReorderActive, let expIdx = expandedAppIndex, expIdx < apps.count {
+                        SubAppOrderManager.shared.saveOrder(
+                            bundleId: apps[expIdx].id,
+                            windows: apps[expIdx].windows
+                        )
+                    }
+                    subAppDragIndex = nil
+                    subAppReorderActive = false
+                    subAppDragOriginalIndex = nil
+                    lastReorderFromIdx = nil
                     cancelLongPress()
 
                     if longPressTriggered {
@@ -254,11 +299,21 @@ struct OrbyView: View {
         guard isKBMode, appeared, !apps.isEmpty else { return }
 
         let keyCode = event.keyCode
+        let hasShift = event.modifierFlags.contains(.shift)
+
         switch keyCode {
         case 123: // Left arrow
-            kbMoveLeft()
+            if hasShift && kbInSubMode {
+                kbReorderSub(direction: -1)
+            } else {
+                kbMoveLeft()
+            }
         case 124: // Right arrow
-            kbMoveRight()
+            if hasShift && kbInSubMode {
+                kbReorderSub(direction: 1)
+            } else {
+                kbMoveRight()
+            }
         case 49: // Space
             kbActivate()
         case 18...23, 25, 26, 28, 29: // Number keys 1-6 (keyCodes: 18=1, 19=2, 20=3, 21=4, 23=5, 22=6)
@@ -432,20 +487,29 @@ struct OrbyView: View {
 
     private func startLongPressDetection(at location: CGPoint) {
         longPressWorkItem?.cancel()
+        closeModeWorkItem?.cancel()
 
+        // Immediately detect if press is on a sub-app (for drag reorder on move)
+        if let idx = expandedAppIndex, idx < apps.count,
+           let subIdx = CircularLayoutEngine.findClosestSubApp(
+               to: location, in: apps[idx].windows,
+               threshold: CircularLayoutEngine.subBubbleRadius + 18
+           ) {
+            subAppDragIndex = subIdx
+            // Schedule close mode at 0.8s (cancelled if drag starts)
+            let closeWork = DispatchWorkItem { [self] in
+                guard appeared, !subAppReorderActive else { return }
+                subAppDragIndex = nil
+                enterCloseMode(.subApps)
+            }
+            closeModeWorkItem = closeWork
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: closeWork)
+            return
+        }
+
+        // Main apps — close mode at 0.8s
         let work = DispatchWorkItem { [self] in
             guard appeared else { return }
-            // Check sub-apps first (higher z-order)
-            if let idx = expandedAppIndex, idx < apps.count,
-               let _ = CircularLayoutEngine.findClosestSubApp(
-                   to: location, in: apps[idx].windows,
-                   threshold: CircularLayoutEngine.subBubbleRadius + 18
-               ) {
-                enterCloseMode(.subApps)
-                return
-            }
-
-            // Then check main apps
             let effectiveR = CircularLayoutEngine.effectiveBubbleRadius(for: apps.count)
             if let _ = CircularLayoutEngine.findClosestApp(
                 to: location, in: apps, offsets: pushOffsets, threshold: effectiveR + 20
@@ -460,6 +524,8 @@ struct OrbyView: View {
     private func cancelLongPress() {
         longPressWorkItem?.cancel()
         longPressWorkItem = nil
+        closeModeWorkItem?.cancel()
+        closeModeWorkItem = nil
         longPressStartPos = nil
     }
 
@@ -781,8 +847,13 @@ struct OrbyView: View {
     private func subAppBubbles() -> some View {
         Group {
             if let idx = expandedAppIndex, idx < apps.count {
-                ForEach(apps[idx].windows.indices, id: \.self) { wIdx in
+                // Use window ID as identity so SwiftUI tracks each bubble
+                // across reorders and animates position changes correctly
+                ForEach(apps[idx].windows) { window in
+                    let wIdx = apps[idx].windows.firstIndex(where: { $0.id == window.id }) ?? 0
                     let vis = subAppStaggerFlags.indices.contains(wIdx) ? subAppStaggerFlags[wIdx] : false
+                    let isDrag = subAppDragIndex == wIdx && subAppReorderActive
+                    let isGrab = subAppDragIndex == wIdx && !subAppReorderActive
                     SubAppBubbleView(
                         window: apps[idx].windows[wIdx],
                         parentIcon: apps[idx].icon,
@@ -796,9 +867,13 @@ struct OrbyView: View {
                                 ?? quickLaunch.slot(for: apps[idx].id)
                         }(),
                         kbFocused: isKBMode && kbInSubMode && kbFocusedSub == wIdx,
-                        kbShortcut: kbShortcutForSub(at: wIdx)
+                        kbShortcut: kbShortcutForSub(at: wIdx),
+                        isDragging: isDrag,
+                        isReorderMode: subAppReorderActive,
+                        slotIndex: wIdx,
+                        isGrabbed: isGrab
                     )
-                    .zIndex(hoveredSubAppIndex == wIdx ? 100 : 0)
+                    .zIndex(isDrag ? 200 : (hoveredSubAppIndex == wIdx ? 100 : 0))
                     .scaleEffect(vis ? 1.0 : 0.01)
                     .opacity(vis ? 1.0 : 0)
                     .animation(subAppSpring.delay(Double(wIdx) * 0.04), value: vis)
@@ -806,7 +881,7 @@ struct OrbyView: View {
                     .onTapGesture {
                         if closeMode == .subApps {
                             handleCloseModeTap(at: apps[idx].windows[wIdx].position)
-                        } else if closeMode == .none {
+                        } else if closeMode == .none && !subAppReorderActive {
                             AppDiscoveryService.shared.activateWindow(apps[idx].windows[wIdx])
                             dismiss()
                         }
@@ -823,7 +898,8 @@ struct OrbyView: View {
         Group {
             if let idx = expandedAppIndex, idx < apps.count,
                hoveredSubAppIndex != nil || optionKey.isHeld {
-                ForEach(apps[idx].windows.indices, id: \.self) { wIdx in
+                ForEach(apps[idx].windows) { window in
+                    let wIdx = apps[idx].windows.firstIndex(where: { $0.id == window.id }) ?? 0
                     let show = hoveredSubAppIndex == wIdx || (optionKey.isHeld && closeMode == .none)
                     let vis = subAppStaggerFlags.indices.contains(wIdx) ? subAppStaggerFlags[wIdx] : false
                     if show && vis {
@@ -1004,6 +1080,12 @@ struct OrbyView: View {
 
     private func loadApps(around pt: CGPoint) {
         var items = AppDiscoveryService.shared.getRunningApps()
+        // Apply saved sub-app ordering
+        for i in items.indices {
+            items[i].windows = SubAppOrderManager.shared.applyOrder(
+                bundleId: items[i].id, windows: items[i].windows
+            )
+        }
         center = pt
         CircularLayoutEngine.layoutApps(&items, center: pt, safeBounds: safeBounds)
         apps = items
@@ -1034,6 +1116,9 @@ struct OrbyView: View {
 
     private func handleMouseMove(_ loc: CGPoint) {
         mousePos = loc
+
+        // Freeze all hover/switch logic when a sub-app is grabbed or being dragged
+        if subAppDragIndex != nil || subAppReorderActive { return }
 
         // Freeze all hover logic while inline tag input is active
         if inlineTagKey != nil { return }
@@ -1409,8 +1494,152 @@ struct OrbyView: View {
     private func layoutSubApps(for i: Int) {
         guard i < apps.count else { return }
         var w = apps[i].windows
-        CircularLayoutEngine.layoutSubApps(&w, parentPosition: apps[i].position, parentAngle: apps[i].angle, center: center, safeBounds: safeBounds)
+        CircularLayoutEngine.layoutSubApps(
+            &w,
+            parentPosition: apps[i].position,
+            parentAngle: apps[i].angle,
+            center: center,
+            safeBounds: safeBounds,
+            clockwise: settings.subAppSortClockwise
+        )
         apps[i].windows = w
+    }
+
+    // MARK: - Drag Connection Line & Ghost Bubble
+
+    /// Line from parent app to the dragged bubble's free position
+    private func dragConnectionLine() -> some View {
+        Group {
+            if subAppReorderActive,
+               let idx = expandedAppIndex, idx < apps.count {
+                let off = offset(for: idx)
+                let pp = CGPoint(x: apps[idx].position.x + off.x, y: apps[idx].position.y + off.y)
+                ConnectionLineView(
+                    from: pp, to: subAppDragPosition,
+                    lineWidth: 1.5, opacity: 0.5, glowColor: .blue
+                )
+            }
+        }
+        .zIndex(90)
+    }
+
+    /// Ghost bubble that follows the cursor freely during drag
+    private func dragGhostBubble() -> some View {
+        Group {
+            if subAppReorderActive,
+               let dragIdx = subAppDragIndex,
+               let idx = expandedAppIndex, idx < apps.count,
+               dragIdx < apps[idx].windows.count {
+                let win = apps[idx].windows[dragIdx]
+                ZStack {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .environment(\.colorScheme, .dark)
+                        .shadow(color: .blue.opacity(0.3), radius: 16, x: 0, y: 4)
+                        .overlay(
+                            Circle()
+                                .strokeBorder(Color.blue.opacity(0.6), lineWidth: 2.5)
+                        )
+
+                    Image(nsImage: apps[idx].icon)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 32, height: 32)
+
+                    if win.isMinimized {
+                        Image(systemName: "minus.circle.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, .gray.opacity(0.7))
+                            .offset(x: 16, y: 16)
+                    }
+                }
+                .frame(width: CircularLayoutEngine.subBubbleRadius * 2,
+                       height: CircularLayoutEngine.subBubbleRadius * 2)
+                // Window name label on ghost bubble
+                .overlay(alignment: .bottom) {
+                    Text(SubAppBubbleView.displayName(for: win.name))
+                        .font(.system(size: 8, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.9))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: 60)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(
+                            Capsule()
+                                .fill(Color(white: 0.2).opacity(0.75))
+                                .shadow(color: .black.opacity(0.3), radius: 1.5)
+                        )
+                        .offset(y: -2)
+                }
+                .scaleEffect(1.15)
+                .opacity(0.9)
+                .position(x: subAppDragPosition.x, y: subAppDragPosition.y)
+                .allowsHitTesting(false)
+                .zIndex(300)
+            }
+        }
+    }
+
+    // MARK: - Sub-App Drag Reorder
+
+    private func handleSubAppDrag(at loc: CGPoint, dragIdx: Int, appIdx: Int) {
+        let windows = apps[appIdx].windows
+        let count = windows.count
+        guard count > 1 else { return }
+
+        // Find which slot the cursor is closest to (by Euclidean distance)
+        var bestIdx = -1
+        var bestDist = CGFloat.greatestFiniteMagnitude
+        for i in 0..<count where i != dragIdx {
+            let dx = loc.x - windows[i].position.x
+            let dy = loc.y - windows[i].position.y
+            let d = sqrt(dx * dx + dy * dy)
+            if d < bestDist { bestDist = d; bestIdx = i }
+        }
+
+        guard bestIdx >= 0, bestIdx != dragIdx else { return }
+
+        // Only trigger when cursor actually overlaps with the target bubble
+        let triggerRadius = CircularLayoutEngine.subBubbleRadius * 1.4
+        guard bestDist < triggerRadius else { return }
+
+        // Anti-oscillation: don't reverse back to the position we just came from
+        let insertIdx = bestIdx
+        if insertIdx == lastReorderFromIdx { return }
+
+        // Insert semantics: remove → insert, all elements between shift
+        let fromIdx = dragIdx
+        withAnimation(softSpring) {
+            let window = apps[appIdx].windows.remove(at: dragIdx)
+            apps[appIdx].windows.insert(window, at: insertIdx)
+            subAppDragIndex = insertIdx
+            lastReorderFromIdx = fromIdx
+            layoutSubApps(for: appIdx)
+        }
+    }
+
+    // MARK: - Keyboard Reorder
+
+    private func kbReorderSub(direction: Int) {
+        guard kbInSubMode, let idx = expandedAppIndex, idx < apps.count else { return }
+        let count = apps[idx].windows.count
+        guard count > 1, kbFocusedSub >= 0, kbFocusedSub < count else { return }
+
+        let targetIdx = (kbFocusedSub + direction + count) % count
+        withAnimation(quickSpring) {
+            let window = apps[idx].windows.remove(at: kbFocusedSub)
+            apps[idx].windows.insert(window, at: targetIdx)
+            kbFocusedSub = targetIdx
+            hoveredSubAppIndex = targetIdx
+            layoutSubApps(for: idx)
+        }
+        SubAppOrderManager.shared.saveOrder(
+            bundleId: apps[idx].id,
+            windows: apps[idx].windows
+        )
     }
 
     private func recalcPushOffsets() {
@@ -1434,6 +1663,10 @@ struct OrbyView: View {
         clearPreviewNow()
         optionKey.stopMonitoring()
         stopRightClickMonitor()
+        subAppDragIndex = nil
+        subAppReorderActive = false
+        subAppDragOriginalIndex = nil
+        lastReorderFromIdx = nil
         closeMode = .none
         withAnimation(.easeOut(duration: 0.18)) { appeared = false }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { isVisible = false }

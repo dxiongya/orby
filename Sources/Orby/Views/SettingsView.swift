@@ -39,6 +39,8 @@ struct SettingsView: View {
                 Divider().padding(.horizontal, 16)
                 previewSection
                 Divider().padding(.horizontal, 16)
+                subWindowOrderSection
+                Divider().padding(.horizontal, 16)
                 tagPresetsSection
                 Divider().padding(.horizontal, 16)
                 quickLaunchSection
@@ -211,6 +213,34 @@ struct SettingsView: View {
                         .controlSize(.small)
                 }
             }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+    }
+
+    // MARK: - Sub-Window Order Section
+
+    private var subWindowOrderSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                Text("Sub-Window Order")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.primary)
+            }
+
+            Picker("Sort Direction", selection: $settings.subAppSortClockwise) {
+                Text("Clockwise").tag(true)
+                Text("Counter-clockwise").tag(false)
+            }
+            .pickerStyle(.segmented)
+            .font(.system(size: 12))
+
+            Text("Long-press a sub-window to drag and reorder. New windows appear at the end.")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
