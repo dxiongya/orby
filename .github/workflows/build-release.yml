@@ -126,15 +126,11 @@ jobs:
             Orby-macOS.zip
             Orby-macOS.dmg
 
-      - name: Create GitHub Release
+      - name: Upload assets to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          name: Orby ${{ steps.version.outputs.version }}
           tag_name: ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
           files: |
             Orby-macOS.zip
             Orby-macOS.dmg
