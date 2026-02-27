@@ -5,6 +5,18 @@ private let softSpring = Animation.spring(response: 0.2, dampingFraction: 0.75)
 private let quickSpring = Animation.spring(response: 0.18, dampingFraction: 0.7)
 private let collapseAnim = Animation.easeOut(duration: 0.12)
 
+/// Non-reactive state for drag reorder — mutations do NOT trigger OrbyView body re-eval.
+/// Only the actual reorder swap (which mutates `apps`) triggers a re-render.
+private final class DragReorderState {
+    var lastReorderTime: CFTimeInterval = 0
+    var lastReorderPosition: CGPoint = .zero
+
+    func reset() {
+        lastReorderTime = 0
+        lastReorderPosition = .zero
+    }
+}
+
 enum CloseMode: Equatable {
     case none
     case mainApps
@@ -167,13 +179,11 @@ struct OrbyView: View {
     // Sub-app drag reorder state
     @State private var subAppDragIndex: Int? = nil
     @State private var subAppReorderActive: Bool = false
-    @State private var subAppDragPosition: CGPoint = .zero  // free-drag cursor position
+    @State private var subAppDragPosition: CGPoint = .zero   // ghost cursor position
     @State private var subAppDragOriginalIndex: Int? = nil   // original index before reorder
     @State private var closeModeWorkItem: DispatchWorkItem?
     @State private var lastReorderFromIdx: Int? = nil        // anti-oscillation: don't reverse
-    @State private var lastReorderTime: CFTimeInterval = 0   // throttle reorder to ~20Hz
-    @State private var lastReorderPosition: CGPoint = .zero  // skip micro-movements
-    @State private var lastDragPositionTime: CFTimeInterval = 0  // throttle ghost to ~60fps
+    @State private var reorderState = DragReorderState()     // non-reactive throttle state
 
 
     var body: some View {
@@ -241,15 +251,11 @@ struct OrbyView: View {
                     // Handle active drag reorder — free position tracking + slot detection
                     if subAppReorderActive, let dragIdx = subAppDragIndex,
                        let expIdx = expandedAppIndex, expIdx < apps.count {
+                        subAppDragPosition = value.location  // ghost tracks at native frame rate
+                        // Reorder detection at ~20Hz — non-reactive state, no body re-eval
                         let now = CACurrentMediaTime()
-                        // Ghost position at ~60fps — avoids 120Hz+ trackpad flooding OrbyView.body
-                        if now - lastDragPositionTime >= 0.016 {
-                            lastDragPositionTime = now
-                            subAppDragPosition = value.location
-                        }
-                        // Reorder detection at ~20Hz — swaps don't pile up
-                        if now - lastReorderTime >= 0.05 {
-                            lastReorderTime = now
+                        if now - reorderState.lastReorderTime >= 0.05 {
+                            reorderState.lastReorderTime = now
                             handleSubAppDrag(at: value.location, dragIdx: dragIdx, appIdx: expIdx)
                         }
                     }
@@ -268,9 +274,7 @@ struct OrbyView: View {
                     subAppReorderActive = false
                     subAppDragOriginalIndex = nil
                     lastReorderFromIdx = nil
-                    lastReorderTime = 0
-                    lastDragPositionTime = 0
-                    lastReorderPosition = .zero
+                    reorderState.reset()
                     cancelLongPress()
 
                     if longPressTriggered {
@@ -1535,7 +1539,6 @@ struct OrbyView: View {
 
     // MARK: - Drag Connection Line & Ghost Bubble
 
-    /// Line from parent app to the dragged bubble's free position
     private func dragConnectionLine() -> some View {
         Group {
             if subAppReorderActive,
@@ -1551,7 +1554,6 @@ struct OrbyView: View {
         .zIndex(90)
     }
 
-    /// Ghost bubble that follows the cursor freely during drag
     private func dragGhostBubble() -> some View {
         Group {
             if subAppReorderActive,
@@ -1585,7 +1587,6 @@ struct OrbyView: View {
                 }
                 .frame(width: CircularLayoutEngine.subBubbleRadius * 2,
                        height: CircularLayoutEngine.subBubbleRadius * 2)
-                // Window name label on ghost bubble
                 .overlay(alignment: .bottom) {
                     Text(SubAppBubbleView.displayName(for: win.name))
                         .font(.system(size: 8, weight: .semibold, design: .rounded))
@@ -1604,7 +1605,7 @@ struct OrbyView: View {
                 }
                 .scaleEffect(1.15)
                 .opacity(0.9)
-                .animation(nil, value: subAppDragPosition)  // zero-lag cursor tracking
+                .animation(nil, value: subAppDragPosition)
                 .position(x: subAppDragPosition.x, y: subAppDragPosition.y)
                 .allowsHitTesting(false)
                 .zIndex(300)
@@ -1620,10 +1621,10 @@ struct OrbyView: View {
         guard count > 1 else { return }
 
         // Skip if cursor barely moved since last evaluation (4pt threshold)
-        let mdx = loc.x - lastReorderPosition.x
-        let mdy = loc.y - lastReorderPosition.y
+        let mdx = loc.x - reorderState.lastReorderPosition.x
+        let mdy = loc.y - reorderState.lastReorderPosition.y
         guard mdx * mdx + mdy * mdy >= 16 else { return }
-        lastReorderPosition = loc
+        reorderState.lastReorderPosition = loc
 
         // Find which slot the cursor is closest to (by Euclidean distance)
         var bestIdx = -1
