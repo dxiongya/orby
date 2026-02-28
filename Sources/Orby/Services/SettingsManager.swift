@@ -64,6 +64,11 @@ struct HotKeyCombination: Codable, Identifiable, Equatable {
     }
 }
 
+enum AppSourceMode: String, CaseIterable {
+    case runningApps = "running"
+    case manualEdit = "manual"
+}
+
 final class SettingsManager: ObservableObject {
     static let shared = SettingsManager()
 
@@ -79,6 +84,9 @@ final class SettingsManager: ObservableObject {
     @Published var keyboardMode: Bool = false {
         didSet { UserDefaults.standard.set(keyboardMode, forKey: "keyboardMode") }
     }
+    @Published var appSourceMode: AppSourceMode = .runningApps {
+        didSet { UserDefaults.standard.set(appSourceMode.rawValue, forKey: "appSourceMode") }
+    }
     @Published var subAppSortClockwise: Bool = true {
         didSet { UserDefaults.standard.set(subAppSortClockwise, forKey: "subAppSortClockwise") }
     }
@@ -93,6 +101,10 @@ final class SettingsManager: ObservableObject {
         showPreview = UserDefaults.standard.object(forKey: "showPreview") as? Bool ?? true
         previewDelay = UserDefaults.standard.object(forKey: "previewDelay") as? Double ?? 0.45
         keyboardMode = UserDefaults.standard.object(forKey: "keyboardMode") as? Bool ?? false
+        if let raw = UserDefaults.standard.string(forKey: "appSourceMode"),
+           let mode = AppSourceMode(rawValue: raw) {
+            appSourceMode = mode
+        }
         subAppSortClockwise = UserDefaults.standard.object(forKey: "subAppSortClockwise") as? Bool ?? true
         mainAppSpeed = UserDefaults.standard.object(forKey: "mainAppSpeed") as? Double ?? 1.6
         subAppSpeed = UserDefaults.standard.object(forKey: "subAppSpeed") as? Double ?? 1.6

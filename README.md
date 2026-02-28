@@ -25,11 +25,12 @@
 
 ## What is Orby?
 
-Orby is a lightweight macOS menu bar utility that reimagines app switching. Instead of a flat list, it arranges all your running applications in a **circular layout** around your cursor, so you can visually find and switch to any app or window in one gesture.
+Orby is a lightweight macOS menu bar utility that reimagines app switching. Instead of a flat list, it arranges your applications in a **circular layout** around your cursor, so you can visually find and switch to any app or window in one gesture.
 
 **Why Orby?**
 
 - **Spatial memory** — Apps appear in the same relative position, building muscle memory over time
+- **Two modes** — Auto-detect running apps, or curate a fixed set of pinned apps that persist even when closed
 - **Window-level control** — Expand any app to see all its windows with live previews
 - **Zero clutter** — Lives in the menu bar, appears only when you need it, disappears when you don't
 - **Keyboard-first** — Hotkeys, quick launch bindings, and modifier reveals keep your hands on the keyboard
@@ -38,11 +39,20 @@ Orby is a lightweight macOS menu bar utility that reimagines app switching. Inst
 
 ### Circular App Switcher
 
-Press **Option + Tab** to summon Orby. All running apps appear in a ring around your cursor. Click any app to switch instantly.
+Press **Option + Tab** to summon Orby. Your apps appear in a ring around your cursor. Click any app to switch instantly.
 
 - Adaptive layout: 1 ring for up to 16 apps, 2 concentric rings for more
 - Smart edge avoidance — the circle repositions near screen edges, menu bar, and dock
 - Non-hovered apps gently push away when you expand one, keeping the view clean
+
+### App Source Modes
+
+Choose how Orby populates the circle:
+
+- **Running Apps** (default) — Automatically shows all currently running applications. Apps appear and disappear as they launch or quit.
+- **Manual Edit** — Curate a fixed set of pinned apps. Non-running apps appear dimmed with a dashed border; click to launch them. Closing a pinned app keeps it in the circle as inactive rather than removing it.
+
+Switch between modes in **Settings > Apps**. In Manual Edit mode, use the visual Layout Preview to add, remove, and drag-reorder your pinned apps.
 
 ### Window Preview
 
@@ -75,7 +85,7 @@ Color-code your apps with tags for quick visual recognition.
 
 Long-press a sub-window bubble and drag to rearrange the order. Your custom order persists until the app is relaunched.
 
-- Choose **clockwise** or **counter-clockwise** layout direction in Settings
+- Choose **clockwise** or **counter-clockwise** sort direction in Settings (applies to both apps and sub-windows)
 - New windows automatically appear at the end of the arc
 
 ### Close Mode
@@ -167,15 +177,25 @@ Grant them in **System Settings > Privacy & Security**.
 
 ## Settings
 
-Access via the menu bar icon > **Settings...** or **Cmd + ,**.
+Access via the menu bar icon > **Settings...** or **Cmd + ,**. Settings are organized into four tabs:
 
+### General
 - **Hotkey Bindings** — Add, remove, or re-record hotkey combinations (keyboard or mouse + modifiers)
 - **Keyboard Mode** — Enable pure keyboard navigation with built-in usage guide
+- **Quick Launch** — View and remove Option + Number bindings
+
+### Apps
+- **App Source** — Switch between "Running Apps" (auto-detect) and "Manual Edit" (curated list)
+- **Layout Preview** — Visual circular preview of pinned apps; drag to reorder, hover to delete
+- **Add Apps** — Search installed applications and pin them to the circle
+
+### Display
 - **Window Preview** — Toggle on/off, adjust preview delay
 - **Animation Speed** — Separate sliders for main app and sub-window entrance animations (0.5x – 3.0x)
-- **Sub-Window Order** — Choose clockwise or counter-clockwise layout; drag to reorder
+- **Sort Direction** — Choose clockwise or counter-clockwise arrangement for apps and sub-windows
+
+### Tags
 - **Tag Presets** — Manage color-coded tag categories
-- **Quick Launch** — View and remove Option + Number bindings
 
 ## System Requirements
 

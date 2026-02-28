@@ -1,9 +1,27 @@
 import SwiftUI
 
+// MARK: - Installed App Info (for app picker)
+
+private struct InstalledAppInfo: Identifiable, Hashable {
+    let bundleId: String
+    let name: String
+    let path: String
+    let icon: NSImage
+
+    var id: String { bundleId }
+
+    func hash(into hasher: inout Hasher) { hasher.combine(bundleId) }
+    static func == (lhs: InstalledAppInfo, rhs: InstalledAppInfo) -> Bool { lhs.bundleId == rhs.bundleId }
+}
+
+// MARK: - Main Settings View
+
 struct SettingsView: View {
     @ObservedObject var settings = SettingsManager.shared
     @ObservedObject var tagManager = TagManager.shared
     @ObservedObject var quickLaunch = QuickLaunchManager.shared
+    @ObservedObject var pinnedManager = PinnedAppsManager.shared
+    @State private var selectedTab = 0
     @State private var isRecording = false
     @State private var recordingDisplay = ""
     @State private var keyMonitor: Any?
@@ -11,61 +29,89 @@ struct SettingsView: View {
     @State private var isAddingTag = false
     @State private var newTagName = ""
     @State private var newTagColor = "blue"
+    @State private var searchText = ""
+    @State private var installedApps: [InstalledAppInfo] = []
     var onStartRecording: (() -> Void)?
     var onStopRecording: (() -> Void)?
     var onShowKBGuide: (() -> Void)?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                // Header
-                HStack {
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: 14))
-                        .foregroundColor(.secondary)
-                    Text("Orby Settings")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+        VStack(spacing: 0) {
+            // Tab bar
+            HStack(spacing: 0) {
+                tabButton("General", icon: "gearshape.fill", index: 0)
+                tabButton("Apps", icon: "square.grid.2x2.fill", index: 1)
+                tabButton("Display", icon: "paintbrush.fill", index: 2)
+                tabButton("Tags", icon: "tag.fill", index: 3)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            Divider()
+
+            // Tab content
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    switch selectedTab {
+                    case 0: generalTab
+                    case 1: appsTab
+                    case 2: displayTab
+                    case 3: tagsTab
+                    default: EmptyView()
+                    }
+                    Spacer(minLength: 16)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
-                .padding(.bottom, 16)
-
-                Divider()
-                    .padding(.horizontal, 16)
-
-                hotkeySection
-                Divider().padding(.horizontal, 16)
-                keyboardModeSection
-                Divider().padding(.horizontal, 16)
-                previewSection
-                Divider().padding(.horizontal, 16)
-                animationSpeedSection
-                Divider().padding(.horizontal, 16)
-                subWindowOrderSection
-                Divider().padding(.horizontal, 16)
-                tagPresetsSection
-                Divider().padding(.horizontal, 16)
-                quickLaunchSection
-
-                Spacer(minLength: 16)
             }
         }
-        .frame(width: 360, height: 580)
+        .frame(minWidth: 520, minHeight: 600)
+        .onAppear { loadInstalledApps() }
         .onDisappear { stopRecording() }
+    }
+
+    // MARK: - Tab Button
+
+    private func tabButton(_ title: String, icon: String, index: Int) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) { selectedTab = index }
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundColor(selectedTab == index ? .accentColor : .secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(selectedTab == index ? Color.accentColor.opacity(0.1) : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - General Tab
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    private var generalTab: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            hotkeySection
+            Divider().padding(.horizontal, 16)
+            keyboardModeSection
+            Divider().padding(.horizontal, 16)
+            quickLaunchSection
+        }
     }
 
     // MARK: - Hotkey Section
 
     private var hotkeySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "keyboard")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-                Text("Hotkey Bindings")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.primary)
-            }
+            sectionHeader(icon: "keyboard", title: "Hotkey Bindings")
 
             VStack(spacing: 4) {
                 ForEach(settings.hotKeys) { combo in
@@ -95,10 +141,7 @@ struct SettingsView: View {
                 }
             }
             .padding(8)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
-            )
+            .background(cardBackground)
 
             if isRecording {
                 HStack(spacing: 8) {
@@ -141,14 +184,7 @@ struct SettingsView: View {
 
     private var keyboardModeSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "keyboard.fill")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-                Text("Keyboard Mode")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.primary)
-            }
+            sectionHeader(icon: "keyboard.fill", title: "Keyboard Mode")
 
             Toggle("Pure Keyboard Navigation", isOn: $settings.keyboardMode)
                 .font(.system(size: 13))
@@ -186,18 +222,276 @@ struct SettingsView: View {
         .padding(.vertical, 16)
     }
 
+    // MARK: - Quick Launch Section
+
+    private var quickLaunchSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(icon: "bolt.fill", title: "Quick Launch")
+
+            VStack(spacing: 4) {
+                let boundSlots = (1...9).filter { quickLaunch.bindings[$0] != nil }
+                if boundSlots.isEmpty {
+                    Text("No bindings")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                        .padding(8)
+                } else {
+                    ForEach(boundSlots, id: \.self) { slot in
+                        if let binding = quickLaunch.bindings[slot] {
+                            HStack(spacing: 8) {
+                                Text("\u{2325}\(slot)")
+                                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                    .frame(width: 30, alignment: .leading)
+                                Image(systemName: "arrow.right")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                                Text(binding.displayName)
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.primary)
+                                if binding.cgWindowID != nil {
+                                    Image(systemName: "macwindow")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary)
+                                }
+                                Spacer()
+                                Button {
+                                    withAnimation(.easeOut(duration: 0.2)) { quickLaunch.unbind(slot: slot) }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+            }
+            .padding(8)
+            .background(cardBackground)
+
+            Text("Right-click apps to bind \u{2325}+Number. Auto-expires when app closes.")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - Apps Tab
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    private var appsTab: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Mode picker
+            VStack(alignment: .leading, spacing: 12) {
+                sectionHeader(icon: "square.grid.2x2", title: "App Source")
+
+                Picker("", selection: $settings.appSourceMode) {
+                    Text("Running Apps").tag(AppSourceMode.runningApps)
+                    Text("Manual Edit").tag(AppSourceMode.manualEdit)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+
+            Divider().padding(.horizontal, 16)
+
+            if settings.appSourceMode == .runningApps {
+                runningAppsInfo
+            } else {
+                manualEditSection
+            }
+        }
+    }
+
+    private var runningAppsInfo: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(icon: "play.circle", title: "Running Apps Mode")
+
+            VStack(alignment: .leading, spacing: 8) {
+                infoRow(icon: "checkmark.circle.fill", color: .green,
+                        text: "Automatically shows all running applications")
+                infoRow(icon: "checkmark.circle.fill", color: .green,
+                        text: "Apps appear/disappear as they launch/quit")
+                infoRow(icon: "checkmark.circle.fill", color: .green,
+                        text: "Windows are detected via Accessibility API")
+            }
+            .padding(12)
+            .background(cardBackground)
+
+            Text("This is the default mode. Orby shows all currently running apps with their windows.")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+    }
+
+    private func infoRow(icon: String, color: Color, text: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 12))
+                .foregroundColor(color)
+            Text(text)
+                .font(.system(size: 12))
+                .foregroundColor(.primary)
+        }
+    }
+
+    // MARK: - Manual Edit Section
+
+    private var manualEditSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Circular preview with drag reorder & delete
+            VStack(alignment: .leading, spacing: 8) {
+                sectionHeader(icon: "circle.grid.3x3", title: "Layout Preview (\(pinnedManager.pinnedApps.count))")
+                if pinnedManager.pinnedApps.isEmpty {
+                    Text("No apps pinned yet. Search and add apps below.")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Drag to reorder · Hover and click ✕ to remove")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+                CircularPreviewView(
+                    pinnedManager: pinnedManager,
+                    clockwise: settings.subAppSortClockwise
+                )
+            }
+
+            Divider().padding(.horizontal, 0)
+
+            // Installed apps search
+            VStack(alignment: .leading, spacing: 12) {
+                sectionHeader(icon: "magnifyingglass", title: "Add Apps")
+
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    TextField("Search installed apps...", text: $searchText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13))
+                }
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(nsColor: .controlBackgroundColor))
+                )
+
+                ScrollView {
+                    VStack(spacing: 2) {
+                        ForEach(filteredInstalledApps) { app in
+                            installedAppRow(app: app)
+                        }
+                    }
+                }
+                .frame(maxHeight: 200)
+                .padding(4)
+                .background(cardBackground)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+    }
+
+    // Pinned app management is handled directly in CircularPreviewView below
+
+    // MARK: - Installed Apps
+
+    private var filteredInstalledApps: [InstalledAppInfo] {
+        let pinned = Set(pinnedManager.pinnedApps.map { $0.bundleId })
+        let available = installedApps.filter { !pinned.contains($0.bundleId) }
+        if searchText.isEmpty { return available }
+        let query = searchText.lowercased()
+        return available.filter {
+            $0.name.lowercased().contains(query) || $0.bundleId.lowercased().contains(query)
+        }
+    }
+
+    private func installedAppRow(app: InstalledAppInfo) -> some View {
+        HStack(spacing: 10) {
+            Image(nsImage: app.icon)
+                .resizable()
+                .frame(width: 24, height: 24)
+            Text(app.name)
+                .font(.system(size: 13))
+                .lineLimit(1)
+            Spacer()
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    pinnedManager.addApp(PinnedApp(
+                        bundleId: app.bundleId,
+                        name: app.name,
+                        bundlePath: app.path
+                    ))
+                }
+            } label: {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.blue)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+    }
+
+    private func loadInstalledApps() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let dirs = ["/Applications", NSHomeDirectory() + "/Applications"]
+            var apps: [InstalledAppInfo] = []
+            let fm = FileManager.default
+
+            for dir in dirs {
+                guard let contents = try? fm.contentsOfDirectory(atPath: dir) else { continue }
+                for item in contents where item.hasSuffix(".app") {
+                    let path = (dir as NSString).appendingPathComponent(item)
+                    guard let bundle = Bundle(path: path),
+                          let bundleId = bundle.bundleIdentifier else { continue }
+                    let name = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+                        ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
+                        ?? item.replacingOccurrences(of: ".app", with: "")
+                    let icon = NSWorkspace.shared.icon(forFile: path)
+                    icon.size = NSSize(width: 32, height: 32)
+                    apps.append(InstalledAppInfo(bundleId: bundleId, name: name, path: path, icon: icon))
+                }
+            }
+
+            apps.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+            DispatchQueue.main.async {
+                self.installedApps = apps
+            }
+        }
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - Display Tab
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    private var displayTab: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            previewSection
+            Divider().padding(.horizontal, 16)
+            animationSpeedSection
+            Divider().padding(.horizontal, 16)
+            sortDirectionSection
+        }
+    }
+
     // MARK: - Preview Section
 
     private var previewSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "eye")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-                Text("Window Preview")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.primary)
-            }
+            sectionHeader(icon: "eye", title: "Window Preview")
 
             Toggle("Show Window Preview", isOn: $settings.showPreview)
                 .font(.system(size: 13))
@@ -224,14 +518,7 @@ struct SettingsView: View {
 
     private var animationSpeedSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "bolt.horizontal.fill")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-                Text("Animation Speed")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.primary)
-            }
+            sectionHeader(icon: "bolt.horizontal.fill", title: "Animation Speed")
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
@@ -265,27 +552,21 @@ struct SettingsView: View {
         .padding(.vertical, 16)
     }
 
-    // MARK: - Sub-Window Order Section
+    // MARK: - Sort Direction Section
 
-    private var subWindowOrderSection: some View {
+    private var sortDirectionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-                Text("Sub-Window Order")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.primary)
-            }
+            sectionHeader(icon: "arrow.triangle.2.circlepath", title: "Sort Direction")
 
-            Picker("Sort Direction", selection: $settings.subAppSortClockwise) {
+            Picker("", selection: $settings.subAppSortClockwise) {
                 Text("Clockwise").tag(true)
                 Text("Counter-clockwise").tag(false)
             }
             .pickerStyle(.segmented)
+            .labelsHidden()
             .font(.system(size: 12))
 
-            Text("Long-press a sub-window to drag and reorder. New windows appear at the end.")
+            Text("Controls the arrangement direction for apps and sub-windows in the circle.")
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
         }
@@ -293,18 +574,21 @@ struct SettingsView: View {
         .padding(.vertical, 16)
     }
 
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - Tags Tab
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    private var tagsTab: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            tagPresetsSection
+        }
+    }
+
     // MARK: - Tag Presets Section
 
     private var tagPresetsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "tag")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-                Text("Tag Presets")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.primary)
-            }
+            sectionHeader(icon: "tag", title: "Tag Presets")
 
             VStack(spacing: 4) {
                 ForEach(tagManager.presetTags) { tag in
@@ -329,10 +613,7 @@ struct SettingsView: View {
                 }
             }
             .padding(8)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
-            )
+            .background(cardBackground)
 
             if isAddingTag {
                 HStack(spacing: 8) {
@@ -391,83 +672,35 @@ struct SettingsView: View {
         .padding(.vertical, 16)
     }
 
-    // MARK: - Quick Launch Section
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARK: - Shared Helpers
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    private var quickLaunchSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "bolt.fill")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-                Text("Quick Launch")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.primary)
-            }
-
-            VStack(spacing: 4) {
-                let boundSlots = (1...9).filter { quickLaunch.bindings[$0] != nil }
-                if boundSlots.isEmpty {
-                    Text("No bindings")
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
-                        .padding(8)
-                } else {
-                    ForEach(boundSlots, id: \.self) { slot in
-                        if let binding = quickLaunch.bindings[slot] {
-                            HStack(spacing: 8) {
-                                Text("⌥\(slot)")
-                                    .font(.system(size: 13, weight: .medium, design: .monospaced))
-                                    .frame(width: 30, alignment: .leading)
-                                Image(systemName: "arrow.right")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.secondary)
-                                Text(binding.displayName)
-                                    .font(.system(size: 13))
-                                    .foregroundColor(.primary)
-                                if binding.cgWindowID != nil {
-                                    Image(systemName: "macwindow")
-                                        .font(.system(size: 10))
-                                        .foregroundColor(.secondary)
-                                }
-                                Spacer()
-                                Button {
-                                    withAnimation(.easeOut(duration: 0.2)) { quickLaunch.unbind(slot: slot) }
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.secondary)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                        }
-                    }
-                }
-            }
-            .padding(8)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
-            )
-
-            Text("Right-click apps to bind ⌥+Number. Auto-expires when app closes.")
-                .font(.system(size: 11))
+    private func sectionHeader(icon: String, title: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 12))
                 .foregroundColor(.secondary)
+            Text(title)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.primary)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
+    }
+
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
     }
 
     // MARK: - Recording Helpers
 
     private func modifierParts(from modFlags: NSEvent.ModifierFlags) -> [String] {
         var parts: [String] = []
-        if modFlags.contains(.function) { parts.append("🌐") }
-        if modFlags.contains(.control) { parts.append("⌃") }
-        if modFlags.contains(.option) { parts.append("⌥") }
-        if modFlags.contains(.shift) { parts.append("⇧") }
-        if modFlags.contains(.command) { parts.append("⌘") }
+        if modFlags.contains(.function) { parts.append("\u{1F310}") }
+        if modFlags.contains(.control) { parts.append("\u{2303}") }
+        if modFlags.contains(.option) { parts.append("\u{2325}") }
+        if modFlags.contains(.shift) { parts.append("\u{21E7}") }
+        if modFlags.contains(.command) { parts.append("\u{2318}") }
         return parts
     }
 
@@ -495,8 +728,6 @@ struct SettingsView: View {
                     || modFlags.contains(.function)
 
                 if keyCode == 53 && !hasModifier { stopRecording(); return nil }
-                // Require at least one modifier for keyboard hotkeys to avoid
-                // intercepting normal typing system-wide
                 guard hasModifier else { return nil }
 
                 let combo = HotKeyCombination(keyCode: keyCode, modifiers: cgFlags(from: modFlags))
@@ -530,5 +761,246 @@ struct SettingsView: View {
         if let m = keyMonitor { NSEvent.removeMonitor(m); keyMonitor = nil }
         if let m = mouseMonitor { NSEvent.removeMonitor(m); mouseMonitor = nil }
         onStopRecording?()
+    }
+}
+
+// MARK: - Circular Preview with Drag Reorder
+
+private struct CircularPreviewView: View {
+    @ObservedObject var pinnedManager: PinnedAppsManager
+    let clockwise: Bool
+
+    @State private var dragId: String? = nil
+    @State private var dragPos: CGPoint = .zero
+    @State private var dragStartPos: CGPoint = .zero
+    @State private var hoveredId: String? = nil
+
+    private let viewSize: CGFloat = 300
+    private let bubbleSize: CGFloat = 50
+
+    private var cx: CGFloat { viewSize / 2 }
+    private var cy: CGFloat { viewSize / 2 }
+
+    private var ringR: CGFloat {
+        let n = CGFloat(pinnedManager.pinnedApps.count)
+        guard n > 1 else { return 0 }
+        let spacing = bubbleSize + 12
+        let natural = n * spacing / (2 * .pi)
+        return min(max(natural, 80), viewSize / 2 - bubbleSize / 2 - 16)
+    }
+
+    private func slotPosition(at index: Int) -> CGPoint {
+        let n = pinnedManager.pinnedApps.count
+        guard n > 0 else { return CGPoint(x: cx, y: cy) }
+        if n == 1 { return CGPoint(x: cx, y: cy - 80) }
+        let step = 2.0 * .pi / Double(n)
+        let a: Double = clockwise
+            ? -.pi / 2 + step * Double(index)
+            : -.pi / 2 - step * Double(index)
+        return CGPoint(x: cx + ringR * CGFloat(cos(a)), y: cy + ringR * CGFloat(sin(a)))
+    }
+
+    private func nearestSlot(to pt: CGPoint) -> Int {
+        let n = pinnedManager.pinnedApps.count
+        guard n > 1 else { return 0 }
+        var bestIdx = 0
+        var bestDist: CGFloat = .greatestFiniteMagnitude
+        for i in 0..<n {
+            let p = slotPosition(at: i)
+            let d = (pt.x - p.x) * (pt.x - p.x) + (pt.y - p.y) * (pt.y - p.y)
+            if d < bestDist { bestDist = d; bestIdx = i }
+        }
+        return bestIdx
+    }
+
+    private func currentIndex(of id: String) -> Int {
+        pinnedManager.pinnedApps.firstIndex(where: { $0.id == id }) ?? 0
+    }
+
+    var body: some View {
+        let n = pinnedManager.pinnedApps.count
+        ZStack {
+            // Center X
+            previewCenter
+                .position(x: cx, y: cy)
+
+            // Empty state
+            if n == 0 {
+                VStack(spacing: 8) {
+                    Image(systemName: "plus.circle.dashed")
+                        .font(.system(size: 32))
+                        .foregroundColor(.white.opacity(0.15))
+                    Text("Add apps below")
+                        .font(.system(size: 12, design: .rounded))
+                        .foregroundColor(.white.opacity(0.25))
+                }
+                .position(x: cx, y: cy)
+            }
+
+            // Ring guide
+            if n > 1 {
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                    .frame(width: ringR * 2, height: ringR * 2)
+                    .position(x: cx, y: cy)
+            }
+
+            // App bubbles
+            ForEach(pinnedManager.pinnedApps) { pinned in
+                makeBubble(pinned: pinned)
+            }
+        }
+        .frame(width: viewSize, height: viewSize)
+        .background(previewBg)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func makeBubble(pinned: PinnedApp) -> some View {
+        let idx = currentIndex(of: pinned.id)
+        let pos = slotPosition(at: idx)
+        let isDragging = dragId == pinned.id
+        let isHovered = hoveredId == pinned.id && dragId == nil
+
+        PreviewBubbleContent(
+            pinned: pinned,
+            size: bubbleSize,
+            isDragging: isDragging,
+            isHovered: isHovered,
+            onDelete: {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    pinnedManager.removeApp(bundleId: pinned.bundleId)
+                }
+            }
+        )
+        .onHover { over in
+            hoveredId = over ? pinned.id : nil
+        }
+        .position(isDragging ? dragPos : pos)
+        .zIndex(isDragging ? 100 : (isHovered ? 50 : 0))
+        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: pos)
+        .gesture(
+            DragGesture(minimumDistance: 5)
+                .onChanged { value in
+                    onDrag(pinned: pinned, translation: value.translation)
+                }
+                .onEnded { _ in
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
+                        dragId = nil
+                    }
+                }
+        )
+    }
+
+    private func onDrag(pinned: PinnedApp, translation: CGSize) {
+        if dragId == nil {
+            let idx = currentIndex(of: pinned.id)
+            dragStartPos = slotPosition(at: idx)
+            dragId = pinned.id
+        }
+        let newPos = CGPoint(
+            x: dragStartPos.x + translation.width,
+            y: dragStartPos.y + translation.height
+        )
+        dragPos = newPos
+
+        let currentIdx = currentIndex(of: pinned.id)
+        let targetIdx = nearestSlot(to: newPos)
+        if targetIdx != currentIdx {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
+                pinnedManager.moveApp(fromIndex: currentIdx, toIndex: targetIdx)
+            }
+        }
+    }
+
+    private var previewCenter: some View {
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.08))
+                .frame(width: 22, height: 22)
+            Image(systemName: "xmark")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundColor(.white.opacity(0.25))
+        }
+    }
+
+    private var previewBg: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(Color(white: 0.10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+            )
+    }
+}
+
+private struct PreviewBubbleContent: View {
+    let pinned: PinnedApp
+    let size: CGFloat
+    let isDragging: Bool
+    let isHovered: Bool
+    let onDelete: () -> Void
+
+    var body: some View {
+        let icon = NSWorkspace.shared.icon(forFile: pinned.bundlePath)
+        let iconSize = size * 0.65
+        VStack(spacing: 3) {
+            ZStack {
+                // Frosted glass circle
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .environment(\.colorScheme, .dark)
+                    .shadow(
+                        color: .black.opacity(isDragging ? 0.25 : 0.12),
+                        radius: isDragging ? 12 : 6,
+                        x: 0, y: isDragging ? 6 : 3
+                    )
+                    .overlay(
+                        Circle()
+                            .strokeBorder(
+                                Color.white.opacity(isDragging ? 0.35 : (isHovered ? 0.30 : 0.18)),
+                                lineWidth: 1
+                            )
+                    )
+
+                // App icon
+                Image(nsImage: icon)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: iconSize, height: iconSize)
+            }
+            .frame(width: size, height: size)
+            // Close badge — top-leading, shown on hover
+            .overlay(alignment: .topLeading) {
+                if isHovered {
+                    Button(action: onDelete) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 18, height: 18)
+                                .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
+                            Image(systemName: "xmark")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .offset(x: -4, y: -4)
+                    .transition(.scale(scale: 0.3).combined(with: .opacity))
+                }
+            }
+
+            // Name label
+            Text(pinned.name)
+                .font(.system(size: 9, weight: .medium, design: .rounded))
+                .foregroundColor(.white.opacity(0.8))
+                .lineLimit(1)
+                .frame(maxWidth: 58)
+        }
+        .scaleEffect(isDragging ? 1.15 : (isHovered ? 1.08 : 1.0))
+        .animation(.spring(response: 0.2, dampingFraction: 0.6), value: isDragging)
+        .animation(.spring(response: 0.2, dampingFraction: 0.6), value: isHovered)
     }
 }

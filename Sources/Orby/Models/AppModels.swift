@@ -13,6 +13,7 @@ struct AppItem: Identifiable, Equatable {
     var ringIndex: Int = 0
     var angle: Double = 0
     var bubbleScale: CGFloat = 1.0
+    var isRunning: Bool = true
 
     static func == (lhs: AppItem, rhs: AppItem) -> Bool {
         lhs.id == rhs.id
@@ -21,6 +22,7 @@ struct AppItem: Identifiable, Equatable {
         && lhs.ringIndex == rhs.ringIndex
         && lhs.bubbleScale == rhs.bubbleScale
         && lhs.windows == rhs.windows
+        && lhs.isRunning == rhs.isRunning
     }
 }
 

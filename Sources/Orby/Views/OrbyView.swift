@@ -576,18 +576,29 @@ struct OrbyView: View {
             let effectiveR = CircularLayoutEngine.effectiveBubbleRadius(for: apps.count)
             if let idx = CircularLayoutEngine.findClosestApp(
                 to: loc, in: apps, offsets: pushOffsets, threshold: effectiveR + 12
-            ) {
+            ), apps[idx].isRunning {
                 AppDiscoveryService.shared.terminateApp(apps[idx])
-                withAnimation(softSpring) {
-                    apps.remove(at: idx)
-                    if idx < staggerFlags.count { staggerFlags.remove(at: idx) }
-                    pushOffsets = Array(repeating: .zero, count: apps.count)
-                    hoveredAppIndex = nil
-                    CircularLayoutEngine.layoutApps(&apps, center: center, safeBounds: safeBounds)
-                }
-                if apps.isEmpty {
-                    closeMode = .none
-                    dismiss()
+
+                if settings.appSourceMode == .manualEdit {
+                    // Manual Edit: keep the bubble but mark as inactive
+                    withAnimation(softSpring) {
+                        apps[idx].isRunning = false
+                        apps[idx].windows.removeAll()
+                        hoveredAppIndex = nil
+                    }
+                } else {
+                    // Running Apps: remove from circle entirely
+                    withAnimation(softSpring) {
+                        apps.remove(at: idx)
+                        if idx < staggerFlags.count { staggerFlags.remove(at: idx) }
+                        pushOffsets = Array(repeating: .zero, count: apps.count)
+                        hoveredAppIndex = nil
+                        CircularLayoutEngine.layoutApps(&apps, center: center, safeBounds: safeBounds)
+                    }
+                    if apps.isEmpty {
+                        closeMode = .none
+                        dismiss()
+                    }
                 }
             }
         } else if closeMode == .subApps {
@@ -851,7 +862,8 @@ struct OrbyView: View {
                 tags: tagManager.tags(for: apps[i].id),
                 quickSlot: quickLaunch.slot(for: apps[i].id),
                 kbFocused: isKBMode && !kbInSubMode && kbFocusedApp == i,
-                kbShortcut: kbShortcutForApp(at: i)
+                kbShortcut: kbShortcutForApp(at: i),
+                isRunning: apps[i].isRunning
             )
             .zIndex(hoveredAppIndex == i ? 100 : 0)
             .offset(x: flyX, y: flyY)
@@ -1103,7 +1115,14 @@ struct OrbyView: View {
     // MARK: - Logic
 
     private func loadApps(around pt: CGPoint) {
-        var items = AppDiscoveryService.shared.getRunningApps()
+        var items: [AppItem]
+
+        if settings.appSourceMode == .manualEdit {
+            items = loadPinnedApps()
+        } else {
+            items = AppDiscoveryService.shared.getRunningApps()
+        }
+
         // Apply saved sub-app ordering
         for i in items.indices {
             items[i].windows = SubAppOrderManager.shared.applyOrder(
@@ -1115,6 +1134,36 @@ struct OrbyView: View {
         apps = items
         pushOffsets = Array(repeating: .zero, count: items.count)
         staggerFlags = Array(repeating: false, count: items.count)
+    }
+
+    /// Load pinned apps for manual edit mode, merging with running app data for windows.
+    private func loadPinnedApps() -> [AppItem] {
+        let pinned = PinnedAppsManager.shared.pinnedApps
+        let runningApps = AppDiscoveryService.shared.getRunningApps()
+        let runningByBundleId = Dictionary(runningApps.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+
+        return pinned.map { pin in
+            if let running = runningByBundleId[pin.bundleId] {
+                // App is running — use its full data (icon, windows, pid)
+                var app = running
+                app.isRunning = true
+                return app
+            } else {
+                // App is not running — create stub with icon from bundle path
+                let icon = NSWorkspace.shared.icon(forFile: pin.bundlePath)
+                icon.size = NSSize(width: 32, height: 32)
+                var app = AppItem(
+                    id: pin.bundleId,
+                    name: pin.name,
+                    icon: icon,
+                    pid: 0,
+                    bundleURL: URL(fileURLWithPath: pin.bundlePath),
+                    windows: []
+                )
+                app.isRunning = false
+                return app
+            }
+        }
     }
 
     private func animateSubAppEntrance(count: Int) {
@@ -1473,6 +1522,14 @@ struct OrbyView: View {
         // Click on a main app bubble
         let clickR = CircularLayoutEngine.effectiveBubbleRadius(for: apps.count)
         if let idx = CircularLayoutEngine.findClosestApp(to: loc, in: apps, offsets: pushOffsets, threshold: clickR + 12) {
+            // Non-running app (manual edit mode) — launch it
+            if !apps[idx].isRunning {
+                if let url = apps[idx].bundleURL {
+                    NSWorkspace.shared.open(url)
+                }
+                dismiss()
+                return
+            }
             if apps[idx].windows.count <= 1 {
                 // Single window — activate and dismiss
                 if apps[idx].windows.count == 1 {
@@ -1502,6 +1559,14 @@ struct OrbyView: View {
 
     private func tapApp(_ i: Int) {
         guard closeMode == .none else { return }
+        // Non-running app (manual edit mode) — launch it
+        if !apps[i].isRunning {
+            if let url = apps[i].bundleURL {
+                NSWorkspace.shared.open(url)
+            }
+            dismiss()
+            return
+        }
         if apps[i].windows.count <= 1 {
             if apps[i].windows.count == 1 {
                 AppDiscoveryService.shared.activateWindow(apps[i].windows[0])

@@ -10,7 +10,14 @@ struct OnboardingView: View {
             title: "Quick Start",
             subtitle: "Summon your apps in a circle",
             keys: "⌥ Tab",
-            detail: "Press the hotkey to open Orby.\nAll running apps appear around your cursor.\nClick any app to switch instantly."
+            detail: "Press the hotkey to open Orby.\nYour apps appear around your cursor.\nClick any app to switch instantly."
+        ),
+        (
+            icon: "square.grid.2x2.fill",
+            title: "App Source Modes",
+            subtitle: "Auto-detect or curate your own list",
+            keys: nil,
+            detail: "Running Apps: auto-shows all open apps.\nManual Edit: pin a fixed set of apps.\nNon-running pinned apps appear dimmed\n— click to launch them."
         ),
         (
             icon: "cursorarrow.and.square.on.square.dashed",

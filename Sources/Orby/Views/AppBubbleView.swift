@@ -36,6 +36,7 @@ struct AppBubbleView: View {
     var quickSlot: Int? = nil
     var kbFocused: Bool = false
     var kbShortcut: String? = nil
+    var isRunning: Bool = true
 
     private var size: CGFloat { CircularLayoutEngine.mainBubbleRadius * 2 * app.bubbleScale }
     private var highlighted: Bool { isHovered || kbFocused }
@@ -77,6 +78,18 @@ struct AppBubbleView: View {
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fit)
                     .frame(width: size * 0.68, height: size * 0.68)
+                    .saturation(isRunning ? 1.0 : 0.3)
+                    .opacity(isRunning ? 1.0 : 0.45)
+
+                // Inactive state overlay
+                if !isRunning {
+                    Circle()
+                        .strokeBorder(Color.white.opacity(0.3), style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.7))
+                        .offset(y: size * 0.35)
+                }
             }
             .frame(width: size, height: size)
             // Tag labels — inside the scale so they follow the bubble
@@ -167,12 +180,12 @@ struct AppBubbleView: View {
             }
             // Close badge — rendered OUTSIDE the scaled frame so it stays prominent
             .overlay(alignment: .topLeading) {
-                if isInCloseMode {
+                if isInCloseMode && isRunning {
                     closeBadge
                         .transition(.scale(scale: 0.3).combined(with: .opacity))
                 }
             }
-            .modifier(JellyWobble(isActive: isInCloseMode, seed: app.id.hashValue))
+            .modifier(JellyWobble(isActive: isInCloseMode && isRunning, seed: app.id.hashValue))
 
             // Name label — show on hover, expand, or keyboard focus
             if !isInCloseMode && (highlighted || isExpanded) {
