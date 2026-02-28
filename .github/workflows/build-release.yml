@@ -1,11 +1,9 @@
-name: Build and Release Orby
+name: Build and Release Orby Pro
 
 on:
   push:
     tags:
       - 'v*'
-    branches:
-      - release
 
   workflow_dispatch:
     inputs:
@@ -19,7 +17,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Orby.app
+    name: Build Orby Pro
     runs-on: macos-14
 
     steps:
@@ -77,10 +75,7 @@ jobs:
             find build -name "Orby.app" -type d 2>/dev/null
             exit 1
           fi
-
-          # Deep re-sign to ensure all nested binaries are signed
           codesign --force --deep -s - "$APP_PATH"
-
           echo "=== Signature ==="
           codesign -dvv "$APP_PATH" 2>&1
           echo "=== Verify ==="
@@ -88,59 +83,58 @@ jobs:
           echo "=== Architectures ==="
           file "$APP_PATH/Contents/MacOS/Orby"
 
-      - name: Create DMG (drag-and-drop installer)
+      - name: Create DMG
         run: |
           APP_PATH="build/Build/Products/Release/Orby.app"
-
-          # create-dmg produces a styled DMG with:
-          #   - Applications symlink for drag-and-drop
-          #   - Fixed window size and icon positions
-          #   - App icon and volume icon
-          # It returns exit code 2 when no signing identity is available
-          # for the DMG itself, but the DMG is still created successfully.
           create-dmg \
-            --volname "Orby" \
+            --volname "Orby Pro" \
             --window-pos 200 120 \
             --window-size 660 400 \
             --icon-size 120 \
             --icon "Orby.app" 160 200 \
             --hide-extension "Orby.app" \
             --app-drop-link 500 200 \
-            "Orby-macOS.dmg" \
+            "Orby-Pro-macOS.dmg" \
             "$APP_PATH" \
             || test $? -eq 2
 
       - name: Create ZIP archive
         run: |
           cd build/Build/Products/Release
-          zip -r -y "../../../../Orby-macOS.zip" Orby.app
+          zip -r -y "../../../../Orby-Pro-macOS.zip" Orby.app
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Orby-macOS
+          name: Orby-Pro-macOS
           path: |
-            Orby-macOS.zip
-            Orby-macOS.dmg
+            Orby-Pro-macOS.zip
+            Orby-Pro-macOS.dmg
 
-      - name: Upload assets to GitHub Release
+      # Release to the PUBLIC orby repo (binary-only, no source code leak)
+      - name: Publish release to public repo
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: |
-            Orby-macOS.zip
-            Orby-macOS.dmg
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
 
-      - name: Create Pre-release (from release branch)
-        if: github.ref == 'refs/heads/release' && !startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          name: Orby Pre-release (${{ steps.version.outputs.build }})
-          tag_name: pre-${{ steps.version.outputs.build }}
-          draft: false
-          prerelease: true
-          generate_release_notes: true
-          files: |
-            Orby-macOS.zip
-            Orby-macOS.dmg
+          # Delete existing release if any
+          gh release delete "$VERSION" --repo dxiongya/orby --yes 2>/dev/null || true
+          # Delete existing tag if any
+          gh api repos/dxiongya/orby/git/refs/tags/"$VERSION" -X DELETE 2>/dev/null || true
+
+          gh release create "$VERSION" \
+            --repo dxiongya/orby \
+            --title "Orby Pro $VERSION" \
+            --notes-file - \
+            Orby-Pro-macOS.dmg \
+            Orby-Pro-macOS.zip <<'NOTES'
+          ## Installation
+
+          1. Download `Orby-Pro-macOS.dmg` or `Orby-Pro-macOS.zip`
+          2. Open the DMG and drag **Orby.app** to Applications, or unzip and move to Applications
+          3. Launch Orby — grant Accessibility and Screen Recording permissions when prompted
+
+          **Requirements:** macOS 13.0 (Ventura) or later
+          NOTES
