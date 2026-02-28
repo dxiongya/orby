@@ -30,7 +30,7 @@ Orby is a lightweight macOS menu bar utility that reimagines app switching. Inst
 **Why Orby?**
 
 - **Spatial memory** — Apps appear in the same relative position, building muscle memory over time
-- **Two modes** — Auto-detect running apps, or curate a fixed set of pinned apps that persist even when closed
+- **Three modes** — Auto-detect running apps, curate a fixed set of pinned apps, or let Smart Suggestions learn your habits and recommend apps automatically
 - **Window-level control** — Expand any app to see all its windows with live previews
 - **Zero clutter** — Lives in the menu bar, appears only when you need it, disappears when you don't
 - **Keyboard-first** — Hotkeys, quick launch bindings, and modifier reveals keep your hands on the keyboard
@@ -51,8 +51,9 @@ Choose how Orby populates the circle:
 
 - **Running Apps** (default) — Automatically shows all currently running applications. Apps appear and disappear as they launch or quit.
 - **Manual Edit** — Curate a fixed set of pinned apps. Non-running apps appear dimmed with a dashed border; click to launch them. Closing a pinned app keeps it in the circle as inactive rather than removing it.
+- **Smart Suggestions** — Learns from your app usage patterns and suggests the most relevant apps based on time of day, day of week, frequency, and optionally your location. Always shows at least 6 apps. All data stays on your Mac.
 
-Switch between modes in **Settings > Apps**. In Manual Edit mode, use the visual Layout Preview to add, remove, and drag-reorder your pinned apps.
+Switch between modes in **Settings > Apps**. In Manual Edit mode, use the visual Layout Preview to add, remove, and drag-reorder your pinned apps. In Smart mode, enable optional location context for place-aware suggestions.
 
 ### Window Preview
 
@@ -172,6 +173,7 @@ Orby requires two macOS permissions on first launch. A built-in guide will walk 
 |-----------|---------|
 | **Accessibility** | Global hotkey detection and window management |
 | **Screen Recording** | Window preview thumbnails |
+| **Location** (optional) | Place-aware Smart Suggestions (e.g., work vs. home) |
 
 Grant them in **System Settings > Privacy & Security**.
 
@@ -185,9 +187,10 @@ Access via the menu bar icon > **Settings...** or **Cmd + ,**. Settings are orga
 - **Quick Launch** — View and remove Option + Number bindings
 
 ### Apps
-- **App Source** — Switch between "Running Apps" (auto-detect) and "Manual Edit" (curated list)
-- **Layout Preview** — Visual circular preview of pinned apps; drag to reorder, hover to delete
-- **Add Apps** — Search installed applications and pin them to the circle
+- **App Source** — Switch between "Running Apps" (auto-detect), "Manual Edit" (curated list), and "Smart" (usage-based suggestions)
+- **Layout Preview** — Visual circular preview of pinned apps; drag to reorder, hover to delete (Manual Edit mode)
+- **Add Apps** — Search installed applications and pin them to the circle (Manual Edit mode)
+- **Smart Suggestions** — Location toggle, usage data management, and cold-start guidance (Smart mode)
 
 ### Display
 - **Window Preview** — Toggle on/off, adjust preview delay

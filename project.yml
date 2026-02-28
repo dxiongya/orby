@@ -14,8 +14,8 @@ settings:
     INFOPLIST_FILE: Info.plist
     CODE_SIGN_ENTITLEMENTS: Orby.entitlements
     LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
-    MARKETING_VERSION: "0.0.6"
-    CURRENT_PROJECT_VERSION: "6"
+    MARKETING_VERSION: "0.1.1"
+    CURRENT_PROJECT_VERSION: "7"
   configs:
     Release:
       SWIFT_OPTIMIZATION_LEVEL: "-O"
@@ -38,6 +38,7 @@ targets:
       properties:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSLocationWhenInUseUsageDescription: "Orby uses your approximate location to suggest different apps based on where you are (e.g., work vs. home). Location data stays on your Mac."
     entitlements:
       path: Orby.entitlements
 schemes:

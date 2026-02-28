@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		06738DB41575B4477EB80F86 /* OverlayPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37F479D989AEC608BC6353B1 /* OverlayPanel.swift */; };
+		1C895116B3A3B104A28C7880 /* SuggestionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F16215EF9CD4CF453EC8F525 /* SuggestionEngine.swift */; };
 		1F0B15E679185AE92271FF6B /* AppBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A055C15CB02157E1ADD0322 /* AppBubbleView.swift */; };
 		20A6EA39E7461941EF6B69ED /* OrbyLogo.png in Resources */ = {isa = PBXBuildFile; fileRef = C50B4AA4C6E65FCDC819BA18 /* OrbyLogo.png */; };
 		2B3AA736FCA6F966FF47BC85 /* MouseCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A67CE8CC80A6A0D3F43CBD76 /* MouseCapture.swift */; };
@@ -29,13 +30,17 @@
 		B863E1AE6014D6E6CF24EDCD /* KeyboardModeGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 043DECB30032275D39F91BBE /* KeyboardModeGuideView.swift */; };
 		BAB1BC946F7F924650B160E7 /* CircularLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45949468FD290F954965A005 /* CircularLayoutEngine.swift */; };
 		C4BF42F2C3DDC52B348C7228 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 209EF095529939E084C0E68D /* Assets.xcassets */; };
+		CCED1E1C45463F05BDAB100E /* UsageRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = D966CCA94DD2EBA9DD2580AB /* UsageRecord.swift */; };
 		CD4C51F808380FBF64908D2A /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BE4B60391638593B5B9D6A5 /* AppDelegate.swift */; };
 		D4520549D10DDA8EC41E0FF1 /* HotKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BAC1A789FDEE9E9894023F /* HotKeyManager.swift */; };
+		E4AD39CC9654E4C10A6E76E3 /* UsageTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AD72A86CBFAE08BDBE2777B /* UsageTracker.swift */; };
+		FD641B61E83034359E2FC0CF /* LocationContextProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7A5EF028AB799BCBD7104A4 /* LocationContextProvider.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		043DECB30032275D39F91BBE /* KeyboardModeGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardModeGuideView.swift; sourceTree = "<group>"; };
 		077405199E92B2D500A3B552 /* SubAppBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubAppBubbleView.swift; sourceTree = "<group>"; };
+		0AD72A86CBFAE08BDBE2777B /* UsageTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageTracker.swift; sourceTree = "<group>"; };
 		0CEF123612BA576F49DD0DF5 /* TagManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagManager.swift; sourceTree = "<group>"; };
 		209EF095529939E084C0E68D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		23BAC1A789FDEE9E9894023F /* HotKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyManager.swift; sourceTree = "<group>"; };
@@ -53,11 +58,14 @@
 		99BDFE4844A71E7700AEA1EF /* PermissionGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionGuideView.swift; sourceTree = "<group>"; };
 		A1B7F2468611123C55B77259 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		A67CE8CC80A6A0D3F43CBD76 /* MouseCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MouseCapture.swift; sourceTree = "<group>"; };
+		B7A5EF028AB799BCBD7104A4 /* LocationContextProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationContextProvider.swift; sourceTree = "<group>"; };
 		C50B4AA4C6E65FCDC819BA18 /* OrbyLogo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = OrbyLogo.png; sourceTree = "<group>"; };
 		C8D7EF0001E800821DC74F56 /* AppTag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTag.swift; sourceTree = "<group>"; };
 		CC74BAB0D9487AB43E7A8FFD /* SubAppOrderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubAppOrderManager.swift; sourceTree = "<group>"; };
+		D966CCA94DD2EBA9DD2580AB /* UsageRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageRecord.swift; sourceTree = "<group>"; };
 		E8208FD4DDF8C8DC9E0FEA19 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		EB2B28C9FA1D85358C1FCE17 /* AppModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModels.swift; sourceTree = "<group>"; };
+		F16215EF9CD4CF453EC8F525 /* SuggestionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionEngine.swift; sourceTree = "<group>"; };
 		F32CE38D9603CF04B1D52205 /* ConnectionLineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionLineView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -83,6 +91,7 @@
 			children = (
 				EB2B28C9FA1D85358C1FCE17 /* AppModels.swift */,
 				C8D7EF0001E800821DC74F56 /* AppTag.swift */,
+				D966CCA94DD2EBA9DD2580AB /* UsageRecord.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -117,11 +126,14 @@
 			children = (
 				548492C26117BCC111032725 /* AppDiscoveryService.swift */,
 				23BAC1A789FDEE9E9894023F /* HotKeyManager.swift */,
+				B7A5EF028AB799BCBD7104A4 /* LocationContextProvider.swift */,
 				3F4ED3868739F4FAA6EB8AA9 /* PinnedAppsManager.swift */,
 				5C33177F00C039B9032B63F7 /* QuickLaunchManager.swift */,
 				453B1C124E5EA7CA86E2BABF /* SettingsManager.swift */,
 				CC74BAB0D9487AB43E7A8FFD /* SubAppOrderManager.swift */,
+				F16215EF9CD4CF453EC8F525 /* SuggestionEngine.swift */,
 				0CEF123612BA576F49DD0DF5 /* TagManager.swift */,
+				0AD72A86CBFAE08BDBE2777B /* UsageTracker.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -237,6 +249,7 @@
 				7A738B672F900298318CD73C /* ConnectionLineView.swift in Sources */,
 				D4520549D10DDA8EC41E0FF1 /* HotKeyManager.swift in Sources */,
 				B863E1AE6014D6E6CF24EDCD /* KeyboardModeGuideView.swift in Sources */,
+				FD641B61E83034359E2FC0CF /* LocationContextProvider.swift in Sources */,
 				2B3AA736FCA6F966FF47BC85 /* MouseCapture.swift in Sources */,
 				A19A204AE774F7BD7E5FEA45 /* OnboardingView.swift in Sources */,
 				7104071D22815C2A32A908F8 /* OrbyView.swift in Sources */,
@@ -248,7 +261,10 @@
 				9E02D5A3C7C089F0E1DF859C /* SettingsView.swift in Sources */,
 				8ADDDA130EB884DF7EE56EB3 /* SubAppBubbleView.swift in Sources */,
 				A948BD6594D946CA272D33F8 /* SubAppOrderManager.swift in Sources */,
+				1C895116B3A3B104A28C7880 /* SuggestionEngine.swift in Sources */,
 				6839F232DD5688558A1A06F7 /* TagManager.swift in Sources */,
+				CCED1E1C45463F05BDAB100E /* UsageRecord.swift in Sources */,
+				E4AD39CC9654E4C10A6E76E3 /* UsageTracker.swift in Sources */,
 				67DFE499D49ADBE40985A6ED /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -293,7 +309,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -314,7 +330,7 @@
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.0.6;
+				MARKETING_VERSION = 0.1.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -396,7 +412,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -412,7 +428,7 @@
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.0.6;
+				MARKETING_VERSION = 0.1.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.orby.app;

@@ -390,11 +390,13 @@ struct OrbyView: View {
             // Activate focused sub-window
             guard let idx = expandedAppIndex, idx < apps.count,
                   kbFocusedSub < apps[idx].windows.count else { return }
+            UsageTracker.shared.recordActivation(bundleId: apps[idx].id)
             AppDiscoveryService.shared.activateWindow(apps[idx].windows[kbFocusedSub])
             dismiss()
         } else {
             guard kbFocusedApp < apps.count else { return }
             let app = apps[kbFocusedApp]
+            UsageTracker.shared.recordActivation(bundleId: app.id)
             if app.windows.count <= 1 {
                 // Single window — activate directly
                 if app.windows.count == 1 {
@@ -423,6 +425,7 @@ struct OrbyView: View {
             guard count > 0 else { return }
             let targetIdx = kbNeighborSub(num: num, focused: kbFocusedSub, count: count)
             guard let target = targetIdx, target < count else { return }
+            UsageTracker.shared.recordActivation(bundleId: apps[idx].id)
             AppDiscoveryService.shared.activateWindow(apps[idx].windows[target])
             dismiss()
         } else {
@@ -430,6 +433,7 @@ struct OrbyView: View {
             let targetIdx = kbNeighborApp(num: num, focused: kbFocusedApp, count: apps.count)
             guard let target = targetIdx, target < apps.count else { return }
             let app = apps[target]
+            UsageTracker.shared.recordActivation(bundleId: app.id)
             if app.windows.count <= 1 {
                 if app.windows.count == 1 {
                     AppDiscoveryService.shared.activateWindow(app.windows[0])
@@ -579,8 +583,9 @@ struct OrbyView: View {
             ), apps[idx].isRunning {
                 AppDiscoveryService.shared.terminateApp(apps[idx])
 
-                if settings.appSourceMode == .manualEdit {
-                    // Manual Edit: keep the bubble but mark as inactive
+                if settings.appSourceMode == .manualEdit
+                    || settings.appSourceMode == .smartSuggestions {
+                    // Manual Edit / Smart Suggestions: keep the bubble but mark as inactive
                     withAnimation(softSpring) {
                         apps[idx].isRunning = false
                         apps[idx].windows.removeAll()
@@ -1117,9 +1122,19 @@ struct OrbyView: View {
     private func loadApps(around pt: CGPoint) {
         var items: [AppItem]
 
-        if settings.appSourceMode == .manualEdit {
+        switch settings.appSourceMode {
+        case .manualEdit:
             items = loadPinnedApps()
-        } else {
+        case .smartSuggestions:
+            items = SuggestionEngine.shared.getSuggestedApps()
+            if items.count < 6 {
+                // Fill remaining slots with running apps not already in the list
+                let existing = Set(items.map { $0.id })
+                let running = AppDiscoveryService.shared.getRunningApps()
+                    .filter { !existing.contains($0.id) }
+                items.append(contentsOf: running.prefix(6 - items.count))
+            }
+        case .runningApps:
             items = AppDiscoveryService.shared.getRunningApps()
         }
 
@@ -1559,7 +1574,9 @@ struct OrbyView: View {
 
     private func tapApp(_ i: Int) {
         guard closeMode == .none else { return }
-        // Non-running app (manual edit mode) — launch it
+        // Record usage for smart suggestions
+        UsageTracker.shared.recordActivation(bundleId: apps[i].id)
+        // Non-running app (manual edit / smart suggestions mode) — launch it
         if !apps[i].isRunning {
             if let url = apps[i].bundleURL {
                 NSWorkspace.shared.open(url)

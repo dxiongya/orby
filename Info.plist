@@ -18,5 +18,7 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Orby uses your approximate location to suggest different apps based on where you are (e.g., work vs. home). Location data stays on your Mac.</string>
 </dict>
 </plist>

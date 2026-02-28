@@ -67,6 +67,7 @@ struct HotKeyCombination: Codable, Identifiable, Equatable {
 enum AppSourceMode: String, CaseIterable {
     case runningApps = "running"
     case manualEdit = "manual"
+    case smartSuggestions = "smart"
 }
 
 final class SettingsManager: ObservableObject {

@@ -21,7 +21,9 @@ struct SettingsView: View {
     @ObservedObject var tagManager = TagManager.shared
     @ObservedObject var quickLaunch = QuickLaunchManager.shared
     @ObservedObject var pinnedManager = PinnedAppsManager.shared
+    @ObservedObject var locationProvider = LocationContextProvider.shared
     @State private var selectedTab = 0
+    @State private var showClearConfirm = false
     @State private var isRecording = false
     @State private var recordingDisplay = ""
     @State private var keyMonitor: Any?
@@ -293,19 +295,26 @@ struct SettingsView: View {
                 Picker("", selection: $settings.appSourceMode) {
                     Text("Running Apps").tag(AppSourceMode.runningApps)
                     Text("Manual Edit").tag(AppSourceMode.manualEdit)
+                    Text("Smart").tag(AppSourceMode.smartSuggestions)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                .onChange(of: settings.appSourceMode) { _ in
+                    SuggestionEngine.shared.invalidateCache()
+                }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
 
             Divider().padding(.horizontal, 16)
 
-            if settings.appSourceMode == .runningApps {
+            switch settings.appSourceMode {
+            case .runningApps:
                 runningAppsInfo
-            } else {
+            case .manualEdit:
                 manualEditSection
+            case .smartSuggestions:
+                smartSuggestionsSection
             }
         }
     }
@@ -396,6 +405,92 @@ struct SettingsView: View {
                 .frame(maxHeight: 200)
                 .padding(4)
                 .background(cardBackground)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+    }
+
+    // MARK: - Smart Suggestions Section
+
+    private var smartSuggestionsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                sectionHeader(icon: "sparkles", title: "Smart Suggestions Mode")
+
+                VStack(alignment: .leading, spacing: 8) {
+                    infoRow(icon: "brain.head.profile", color: .purple,
+                            text: "Learns from your app usage patterns")
+                    infoRow(icon: "clock.fill", color: .blue,
+                            text: "Adapts to time of day and day of week")
+                    infoRow(icon: "circle.grid.3x3.fill", color: .orange,
+                            text: "Always shows at least 6 apps, up to 10")
+                    infoRow(icon: "lock.shield.fill", color: .green,
+                            text: "All data stored locally on your Mac")
+                }
+                .padding(12)
+                .background(cardBackground)
+
+                if !UsageTracker.shared.hasData {
+                    HStack(spacing: 8) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.blue)
+                        Text("Start using Orby to build up usage data. Running apps will fill in until enough patterns are learned.")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.blue.opacity(0.08))
+                    )
+                }
+            }
+
+            Divider().padding(.horizontal, 0)
+
+            // Location toggle
+            VStack(alignment: .leading, spacing: 8) {
+                sectionHeader(icon: "location.fill", title: "Location Context")
+
+                Toggle("Use location for better suggestions", isOn: $locationProvider.locationEnabled)
+                    .font(.system(size: 13))
+
+                Text("Suggests different apps based on where you are (e.g., work vs. home). Your location data never leaves your Mac.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+
+            Divider().padding(.horizontal, 0)
+
+            // Clear data
+            VStack(alignment: .leading, spacing: 8) {
+                sectionHeader(icon: "trash", title: "Usage Data")
+
+                Button(role: .destructive) {
+                    showClearConfirm = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "trash.fill").font(.system(size: 12))
+                        Text("Clear Usage History").font(.system(size: 12, weight: .medium))
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.red)
+                .alert("Clear Usage History?", isPresented: $showClearConfirm) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Clear", role: .destructive) {
+                        UsageTracker.shared.clearAllData()
+                        SuggestionEngine.shared.invalidateCache()
+                    }
+                } message: {
+                    Text("This will delete all usage data. Smart Suggestions will start fresh.")
+                }
+
+                Text("Removes all recorded app usage history used for suggestions.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
             }
         }
         .padding(.horizontal, 20)

@@ -15,9 +15,9 @@ struct OnboardingView: View {
         (
             icon: "square.grid.2x2.fill",
             title: "App Source Modes",
-            subtitle: "Auto-detect or curate your own list",
+            subtitle: "Three ways to populate your circle",
             keys: nil,
-            detail: "Running Apps: auto-shows all open apps.\nManual Edit: pin a fixed set of apps.\nNon-running pinned apps appear dimmed\n— click to launch them."
+            detail: "Running Apps: auto-shows all open apps.\nManual Edit: pin a fixed set of apps.\nSmart: learns your habits and suggests\napps based on time, day & location."
         ),
         (
             icon: "cursorarrow.and.square.on.square.dashed",
