@@ -134,10 +134,13 @@ struct OrbyView: View {
     @State private var previewPosition: CGPoint = .zero
     @State private var hoverTimer: DispatchWorkItem?
     @State private var previewForWindowId: Int = -1
+    @State private var previewAppIndex: Int?
+    @State private var previewWindowIndex: Int?
     @State private var previewFrame: CGRect = .zero
     @State private var subAppStaggerFlags: [Bool] = []
     @State private var isHoveringPreview = false
     @State private var previewTitle: String = ""
+    @State private var previewNoWindowApp: (icon: NSImage, name: String)?
     @State private var previewDismissWorkItem: DispatchWorkItem?
     @StateObject private var zoomState = PreviewZoomState()
     @State private var switchWorkItem: DispatchWorkItem?
@@ -162,6 +165,9 @@ struct OrbyView: View {
 
     // Keyboard mode state
     @ObservedObject private var settings = SettingsManager.shared
+    @ObservedObject private var recentItemsService = RecentItemsService.shared
+    @State private var recentItemFrames: [String: CGRect] = [:]
+    @State private var hoveredRecentItemId: String?
 
     // Speed-scaled entrance animations
     private var jellySpring: Animation {
@@ -199,12 +205,16 @@ struct OrbyView: View {
                     subAppBubbles()
                     dragGhostBubble()
                     subAppLabels()
+                    if settings.showRecentItems {
+                        recentItemsBar()
+                    }
                     windowPreview()
                     closeModeHint()
                     closeButton()
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
+            .coordinateSpace(name: "orbyCanvas")
             .onAppear {
                 computeCenter(geoSize: geo.size)
             }
@@ -775,6 +785,7 @@ struct OrbyView: View {
             : CGPoint(x: rawX, y: rawY)
         mousePos = cursorPos
         loadApps(around: cursorPos)
+        if settings.showRecentItems { recentItemsService.fetchRecentItems() }
         optionKey.startMonitoring()
         if !isKBMode { startRightClickMonitor() }
         withAnimation(jellySpring) { appeared = true }
@@ -797,6 +808,72 @@ struct OrbyView: View {
             .ignoresSafeArea()
             .animation(.easeOut(duration: 0.35), value: appeared)
             .onTapGesture { dismiss() }
+    }
+
+    // MARK: - Recent Items Bar
+
+    private func recentItemsBar() -> some View {
+        RecentItemsBarView(
+            items: recentItemsService.recentItems,
+            safeBounds: safeBounds,
+            appeared: appeared,
+            onItemClicked: { item in
+                activateRecentItem(item)
+                dismiss()
+            },
+            itemFrames: $recentItemFrames,
+            hoveredRecentItemId: $hoveredRecentItemId
+        )
+    }
+
+    private func isClickInBarRegion(_ loc: CGPoint) -> Bool {
+        let barCenterY = safeBounds.maxY - 56
+        let barHalfH: CGFloat = 50
+        let barW = min(safeBounds.width - 32, 600)
+        let barMinX = safeBounds.midX - barW / 2
+        let barMaxX = safeBounds.midX + barW / 2
+        return loc.y >= barCenterY - barHalfH && loc.y <= barCenterY + barHalfH
+            && loc.x >= barMinX && loc.x <= barMaxX
+    }
+
+    private func activateRecentItem(_ item: RecentItem) {
+        if item.kind == .application {
+            // For apps: check if running and has visible windows
+            if let app = NSWorkspace.shared.runningApplications.first(where: {
+                $0.activationPolicy == .regular && $0.bundleURL == item.url
+            }) {
+                // Check if the app has any visible windows
+                let hasVisibleWindow = Self.appHasVisibleWindow(pid: app.processIdentifier)
+                if hasVisibleWindow {
+                    // Has windows — just unhide and activate
+                    app.unhide()
+                    app.activate()
+                } else {
+                    // Running but no visible windows — open(url) triggers reopen behavior
+                    NSWorkspace.shared.open(item.url)
+                }
+            } else {
+                // App not running — launch it
+                NSWorkspace.shared.open(item.url)
+            }
+        } else {
+            NSWorkspace.shared.open(item.url)
+        }
+    }
+
+    private static func appHasVisibleWindow(pid: pid_t) -> Bool {
+        guard let list = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
+        ) as? [[String: Any]] else { return false }
+        return list.contains { info in
+            guard let wPid = info[kCGWindowOwnerPID as String] as? pid_t, wPid == pid,
+                  let layer = info[kCGWindowLayer as String] as? Int, layer == 0,
+                  let b = info[kCGWindowBounds as String] as? [String: Any],
+                  let w = (b["Width"] as? NSNumber)?.doubleValue,
+                  let h = (b["Height"] as? NSNumber)?.doubleValue
+            else { return false }
+            return w > 50 && h > 50
+        }
     }
 
     // MARK: - Close Button
@@ -1095,6 +1172,35 @@ struct OrbyView: View {
                 }
                 .position(x: previewPosition.x, y: previewPosition.y)
                 .transition(.scale(scale: 0.7).combined(with: .opacity))
+            } else if closeMode == .none, let noWinApp = previewNoWindowApp {
+                VStack(spacing: 8) {
+                    Image(nsImage: noWinApp.icon)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 48, height: 48)
+
+                    Text(noWinApp.name)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundColor(.white.opacity(0.85))
+                        .lineLimit(1)
+
+                    Text("无打开窗口")
+                        .font(.system(size: 10))
+                        .foregroundColor(.white.opacity(0.45))
+                }
+                .frame(width: 140, height: 120)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(.ultraThinMaterial)
+                        .environment(\.colorScheme, .dark)
+                        .shadow(color: .black.opacity(0.35), radius: 20, x: 0, y: 10)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                )
+                .position(x: previewPosition.x, y: previewPosition.y)
+                .transition(.scale(scale: 0.7).combined(with: .opacity))
             }
         }
     }
@@ -1296,6 +1402,30 @@ struct OrbyView: View {
             return
         }
 
+        // STEP 4.6: app with no windows — show "no window" placeholder (same size as normal preview)
+        if let idx = appIdx, expandedAppIndex == nil {
+            let app = apps[idx]
+            // Avoid re-triggering if already showing placeholder for this app
+            if previewNoWindowApp?.name == app.name { return }
+            clearPreviewNow()
+            let off = offset(for: idx)
+            let anchor = CGPoint(x: app.position.x + off.x, y: app.position.y + off.y)
+            let cardW: CGFloat = 180
+            let cardH: CGFloat = 140
+            let pos = findBestPreviewPosition(
+                anchor: anchor, cardSize: CGSize(width: cardW, height: cardH)
+            )
+            withAnimation(quickSpring) {
+                previewNoWindowApp = (icon: app.icon, name: app.name)
+                previewPosition = pos
+                previewFrame = CGRect(
+                    x: pos.x - cardW / 2, y: pos.y - cardH / 2,
+                    width: cardW, height: cardH
+                )
+            }
+            return
+        }
+
         // STEP 5: clear sub hover (keep preview if mouse is on the preview card)
         if expandedAppIndex != nil {
             if isHoveringPreview || isMouseOverPreview(loc) { return }
@@ -1303,9 +1433,14 @@ struct OrbyView: View {
             if previewImage != nil { schedulePreviewDismiss() }
         }
 
-        // STEP 5b: clear single-window preview when hovering nothing
-        if expandedAppIndex == nil && previewImage != nil && appIdx == nil {
-            if !isHoveringPreview && !isMouseOverPreview(loc) { schedulePreviewDismiss() }
+        // STEP 5b: clear single-window preview / no-window placeholder when hovering nothing
+        if expandedAppIndex == nil && appIdx == nil {
+            if previewImage != nil && !isHoveringPreview && !isMouseOverPreview(loc) {
+                schedulePreviewDismiss()
+            }
+            if previewNoWindowApp != nil {
+                withAnimation(quickSpring) { previewNoWindowApp = nil }
+            }
         }
     }
 
@@ -1361,6 +1496,8 @@ struct OrbyView: View {
         hoverTimer?.cancel()
         cancelPreviewDismiss()
         previewForWindowId = windowId
+        previewAppIndex = appIdx
+        previewWindowIndex = wIdx
 
         let delay = SettingsManager.shared.previewDelay
         let work = DispatchWorkItem { [self] in
@@ -1479,8 +1616,11 @@ struct OrbyView: View {
         hoverTimer = nil
         cancelPreviewDismiss()
         previewForWindowId = -1
+        previewAppIndex = nil
+        previewWindowIndex = nil
         previewImage = nil
         previewTitle = ""
+        previewNoWindowApp = nil
         isHoveringPreview = false
         previewFrame = .zero
         zoomState.stopMonitoring()
@@ -1488,18 +1628,32 @@ struct OrbyView: View {
     }
 
     private func closePreviewWindow() {
-        guard let idx = expandedAppIndex, idx < apps.count,
-              let wIdx = hoveredSubAppIndex, wIdx < apps[idx].windows.count else { return }
-        let window = apps[idx].windows[wIdx]
+        guard let aIdx = previewAppIndex, aIdx < apps.count,
+              let wIdx = previewWindowIndex, wIdx < apps[aIdx].windows.count else { return }
+        let window = apps[aIdx].windows[wIdx]
+        let wasExpanded = expandedAppIndex == aIdx
+        let appId = apps[aIdx].id
         AppDiscoveryService.shared.closeWindow(window)
         clearPreviewNow()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
+            // Collapse first so loadApps recalculates clean layout
             subAppStaggerFlags = []
-            withAnimation(softSpring) {
-                expandedAppIndex = nil; hoveredSubAppIndex = nil; recalcPushOffsets()
-            }
+            expandedAppIndex = nil
+            hoveredSubAppIndex = nil
+
             loadApps(around: center)
             animateStaggeredEntrance()
+
+            // If it was expanded and still has multiple windows, re-expand
+            if wasExpanded, let newIdx = apps.firstIndex(where: { $0.id == appId }),
+               apps[newIdx].windows.count > 1 {
+                withAnimation(softSpring) {
+                    expandedAppIndex = newIdx
+                    layoutSubApps(for: newIdx)
+                    recalcPushOffsets()
+                }
+                animateSubAppEntrance(count: apps[newIdx].windows.count)
+            }
         }
     }
 
@@ -1516,17 +1670,52 @@ struct OrbyView: View {
 
     private func handleClick(at loc: CGPoint) {
         if inlineTagKey != nil {
-            // If clicking on the tag input itself, let it handle focus
             if isClickOnInlineTag(loc) { return }
-            // Clicking elsewhere dismisses the tag input
             dismissInlineTag()
             return
         }
         let dx = loc.x - center.x, dy = loc.y - center.y
         if sqrt(dx*dx + dy*dy) < 22 { dismiss(); return }
 
-        // Click on preview card — let its own tap handler deal with it
-        if previewImage != nil && isMouseOverPreview(loc) { return }
+        // Click on recent items bar — only if click is in the bar region
+        if settings.showRecentItems && isClickInBarRegion(loc) {
+            if let hId = hoveredRecentItemId,
+               let item = recentItemsService.recentItems.first(where: { $0.id == hId }) {
+                activateRecentItem(item)
+                dismiss()
+                return
+            }
+            for (itemId, frame) in recentItemFrames {
+                if frame.contains(loc),
+                   let item = recentItemsService.recentItems.first(where: { $0.id == itemId }) {
+                    activateRecentItem(item)
+                    dismiss()
+                    return
+                }
+            }
+        }
+
+        // Click on preview card
+        if previewImage != nil && isMouseOverPreview(loc) {
+            // Close button: top-left corner of the preview card
+            let closeBtnCenter = CGPoint(x: previewFrame.minX + 16, y: previewFrame.minY + 14)
+            let cdx = loc.x - closeBtnCenter.x, cdy = loc.y - closeBtnCenter.y
+            if sqrt(cdx*cdx + cdy*cdy) < 16 {
+                closePreviewWindow()
+                return
+            }
+            // Click elsewhere on preview — activate the previewed window
+            if zoomState.zoom > 1.05 {
+                withAnimation(.spring(response: 0.2, dampingFraction: 0.75)) {
+                    zoomState.zoom = 1.0
+                }
+            } else if let aIdx = previewAppIndex, aIdx < apps.count,
+                      let wIdx = previewWindowIndex, wIdx < apps[aIdx].windows.count {
+                AppDiscoveryService.shared.activateWindow(apps[aIdx].windows[wIdx])
+                dismiss()
+            }
+            return
+        }
 
         // Click on a sub-app bubble — activate that window
         if let idx = expandedAppIndex, idx < apps.count,
@@ -1786,6 +1975,8 @@ struct OrbyView: View {
         subAppDragOriginalIndex = nil
         lastReorderFromIdx = nil
         closeMode = .none
+        recentItemFrames = [:]
+        hoveredRecentItemId = nil
         withAnimation(.easeOut(duration: 0.18)) { appeared = false }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { isVisible = false }
     }

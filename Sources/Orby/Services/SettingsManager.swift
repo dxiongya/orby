@@ -97,6 +97,9 @@ final class SettingsManager: ObservableObject {
     @Published var subAppSpeed: Double = 1.6 {
         didSet { UserDefaults.standard.set(subAppSpeed, forKey: "subAppSpeed") }
     }
+    @Published var showRecentItems: Bool = true {
+        didSet { UserDefaults.standard.set(showRecentItems, forKey: "showRecentItems") }
+    }
 
     private init() {
         showPreview = UserDefaults.standard.object(forKey: "showPreview") as? Bool ?? true
@@ -109,6 +112,7 @@ final class SettingsManager: ObservableObject {
         subAppSortClockwise = UserDefaults.standard.object(forKey: "subAppSortClockwise") as? Bool ?? true
         mainAppSpeed = UserDefaults.standard.object(forKey: "mainAppSpeed") as? Double ?? 1.6
         subAppSpeed = UserDefaults.standard.object(forKey: "subAppSpeed") as? Double ?? 1.6
+        showRecentItems = UserDefaults.standard.object(forKey: "showRecentItems") as? Bool ?? true
         loadHotKeys()
     }
 

@@ -377,7 +377,31 @@ final class AppDiscoveryService {
 
     func activateApp(_ app: AppItem) {
         if let runningApp = NSRunningApplication(processIdentifier: app.pid) {
-            runningApp.activate(options: [.activateIgnoringOtherApps])
+            // Check if app has visible windows
+            if Self.appHasVisibleWindow(pid: app.pid) {
+                runningApp.unhide()
+                runningApp.activate()
+            } else if let url = app.bundleURL {
+                // No visible windows — open(url) triggers reopen/new window
+                NSWorkspace.shared.open(url)
+            } else {
+                runningApp.activate()
+            }
+        }
+    }
+
+    private static func appHasVisibleWindow(pid: pid_t) -> Bool {
+        guard let list = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
+        ) as? [[String: Any]] else { return false }
+        return list.contains { info in
+            guard let wPid = info[kCGWindowOwnerPID as String] as? pid_t, wPid == pid,
+                  let layer = info[kCGWindowLayer as String] as? Int, layer == 0,
+                  let b = info[kCGWindowBounds as String] as? [String: Any],
+                  let w = (b["Width"] as? NSNumber)?.doubleValue,
+                  let h = (b["Height"] as? NSNumber)?.doubleValue
+            else { return false }
+            return w > 50 && h > 50
         }
     }
 

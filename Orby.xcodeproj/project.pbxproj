@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0449A63FF3431940F383F448 /* RecentItemsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A7EB60B55C7EFD7182763B2 /* RecentItemsService.swift */; };
 		06738DB41575B4477EB80F86 /* OverlayPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37F479D989AEC608BC6353B1 /* OverlayPanel.swift */; };
 		1C895116B3A3B104A28C7880 /* SuggestionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F16215EF9CD4CF453EC8F525 /* SuggestionEngine.swift */; };
 		1F0B15E679185AE92271FF6B /* AppBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A055C15CB02157E1ADD0322 /* AppBubbleView.swift */; };
@@ -22,11 +23,13 @@
 		7104071D22815C2A32A908F8 /* OrbyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F5ABA27FD180C9F0F304952 /* OrbyView.swift */; };
 		7A738B672F900298318CD73C /* ConnectionLineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F32CE38D9603CF04B1D52205 /* ConnectionLineView.swift */; };
 		8ADDDA130EB884DF7EE56EB3 /* SubAppBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077405199E92B2D500A3B552 /* SubAppBubbleView.swift */; };
+		9632860FE03850E151828166 /* RecentItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 895DEAE4602217C8ADF2FDA8 /* RecentItem.swift */; };
 		966A4A09AB6BE82DFDDE3D62 /* AppDiscoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 548492C26117BCC111032725 /* AppDiscoveryService.swift */; };
 		99B0B1678E56027763E2FC6B /* PermissionGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99BDFE4844A71E7700AEA1EF /* PermissionGuideView.swift */; };
 		9E02D5A3C7C089F0E1DF859C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8208FD4DDF8C8DC9E0FEA19 /* SettingsView.swift */; };
 		A19A204AE774F7BD7E5FEA45 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E9E3318D42113683700C498 /* OnboardingView.swift */; };
 		A948BD6594D946CA272D33F8 /* SubAppOrderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC74BAB0D9487AB43E7A8FFD /* SubAppOrderManager.swift */; };
+		B64FFB3550A0000E900B526C /* RecentItemsBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C405FF60E0DBAE22EE02F846 /* RecentItemsBarView.swift */; };
 		B863E1AE6014D6E6CF24EDCD /* KeyboardModeGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 043DECB30032275D39F91BBE /* KeyboardModeGuideView.swift */; };
 		BAB1BC946F7F924650B160E7 /* CircularLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45949468FD290F954965A005 /* CircularLayoutEngine.swift */; };
 		C4BF42F2C3DDC52B348C7228 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 209EF095529939E084C0E68D /* Assets.xcassets */; };
@@ -45,6 +48,7 @@
 		209EF095529939E084C0E68D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		23BAC1A789FDEE9E9894023F /* HotKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyManager.swift; sourceTree = "<group>"; };
 		2A055C15CB02157E1ADD0322 /* AppBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBubbleView.swift; sourceTree = "<group>"; };
+		2A7EB60B55C7EFD7182763B2 /* RecentItemsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentItemsService.swift; sourceTree = "<group>"; };
 		37F479D989AEC608BC6353B1 /* OverlayPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayPanel.swift; sourceTree = "<group>"; };
 		3F4ED3868739F4FAA6EB8AA9 /* PinnedAppsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedAppsManager.swift; sourceTree = "<group>"; };
 		453B1C124E5EA7CA86E2BABF /* SettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsManager.swift; sourceTree = "<group>"; };
@@ -54,11 +58,13 @@
 		5E9E3318D42113683700C498 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		5F5ABA27FD180C9F0F304952 /* OrbyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbyView.swift; sourceTree = "<group>"; };
 		7BE4B60391638593B5B9D6A5 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		895DEAE4602217C8ADF2FDA8 /* RecentItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentItem.swift; sourceTree = "<group>"; };
 		98919179B9D4EA7A534BEC97 /* Orby.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Orby.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		99BDFE4844A71E7700AEA1EF /* PermissionGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionGuideView.swift; sourceTree = "<group>"; };
 		A1B7F2468611123C55B77259 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		A67CE8CC80A6A0D3F43CBD76 /* MouseCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MouseCapture.swift; sourceTree = "<group>"; };
 		B7A5EF028AB799BCBD7104A4 /* LocationContextProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationContextProvider.swift; sourceTree = "<group>"; };
+		C405FF60E0DBAE22EE02F846 /* RecentItemsBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentItemsBarView.swift; sourceTree = "<group>"; };
 		C50B4AA4C6E65FCDC819BA18 /* OrbyLogo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = OrbyLogo.png; sourceTree = "<group>"; };
 		C8D7EF0001E800821DC74F56 /* AppTag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTag.swift; sourceTree = "<group>"; };
 		CC74BAB0D9487AB43E7A8FFD /* SubAppOrderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubAppOrderManager.swift; sourceTree = "<group>"; };
@@ -91,6 +97,7 @@
 			children = (
 				EB2B28C9FA1D85358C1FCE17 /* AppModels.swift */,
 				C8D7EF0001E800821DC74F56 /* AppTag.swift */,
+				895DEAE4602217C8ADF2FDA8 /* RecentItem.swift */,
 				D966CCA94DD2EBA9DD2580AB /* UsageRecord.swift */,
 			);
 			path = Models;
@@ -107,6 +114,7 @@
 				5F5ABA27FD180C9F0F304952 /* OrbyView.swift */,
 				37F479D989AEC608BC6353B1 /* OverlayPanel.swift */,
 				99BDFE4844A71E7700AEA1EF /* PermissionGuideView.swift */,
+				C405FF60E0DBAE22EE02F846 /* RecentItemsBarView.swift */,
 				E8208FD4DDF8C8DC9E0FEA19 /* SettingsView.swift */,
 				077405199E92B2D500A3B552 /* SubAppBubbleView.swift */,
 			);
@@ -129,6 +137,7 @@
 				B7A5EF028AB799BCBD7104A4 /* LocationContextProvider.swift */,
 				3F4ED3868739F4FAA6EB8AA9 /* PinnedAppsManager.swift */,
 				5C33177F00C039B9032B63F7 /* QuickLaunchManager.swift */,
+				2A7EB60B55C7EFD7182763B2 /* RecentItemsService.swift */,
 				453B1C124E5EA7CA86E2BABF /* SettingsManager.swift */,
 				CC74BAB0D9487AB43E7A8FFD /* SubAppOrderManager.swift */,
 				F16215EF9CD4CF453EC8F525 /* SuggestionEngine.swift */,
@@ -257,6 +266,9 @@
 				99B0B1678E56027763E2FC6B /* PermissionGuideView.swift in Sources */,
 				3C01B0E8C013AF01F3D7AE4F /* PinnedAppsManager.swift in Sources */,
 				5BDC5DF3E920CA24E937CA6E /* QuickLaunchManager.swift in Sources */,
+				9632860FE03850E151828166 /* RecentItem.swift in Sources */,
+				B64FFB3550A0000E900B526C /* RecentItemsBarView.swift in Sources */,
+				0449A63FF3431940F383F448 /* RecentItemsService.swift in Sources */,
 				39B7BC87B90732BA17AC0222 /* SettingsManager.swift in Sources */,
 				9E02D5A3C7C089F0E1DF859C /* SettingsView.swift in Sources */,
 				8ADDDA130EB884DF7EE56EB3 /* SubAppBubbleView.swift in Sources */,

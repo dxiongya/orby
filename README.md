@@ -89,6 +89,16 @@ Long-press a sub-window bubble and drag to rearrange the order. Your custom orde
 - Choose **clockwise** or **counter-clockwise** sort direction in Settings (applies to both apps and sub-windows)
 - New windows automatically appear at the end of the arc
 
+### Recent Items Bar
+
+A horizontal scroll bar at the bottom of the overlay shows your recently used apps, files, and folders.
+
+- Apps ordered by most recent activation, files by last opened date (via Spotlight)
+- Hover to preview: live window capture for apps, QuickLook thumbnail for files
+- Apps running without visible windows show a placeholder with their icon
+- Click to open — intelligently handles apps with closed windows
+- Toggle on/off in **Settings > Display > Recent Items**
+
 ### Close Mode
 
 Long-press any bubble to enter **Close Mode** — all bubbles start wobbling. Tap any wobbling bubble to close that app or window. Press **Escape** to exit without closing anything.
@@ -196,6 +206,7 @@ Access via the menu bar icon > **Settings...** or **Cmd + ,**. Settings are orga
 - **Window Preview** — Toggle on/off, adjust preview delay
 - **Animation Speed** — Separate sliders for main app and sub-window entrance animations (0.5x – 3.0x)
 - **Sort Direction** — Choose clockwise or counter-clockwise arrangement for apps and sub-windows
+- **Recent Items** — Show/hide the bottom recent items bar
 
 ### Tags
 - **Tag Presets** — Manage color-coded tag categories

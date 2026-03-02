@@ -200,7 +200,7 @@ struct SettingsView: View {
                 }
 
             HStack {
-                Text("Orby appears centered. Use arrow keys to navigate, Space to activate, 1-6 for nearby apps.")
+                Text("Orby always opens at screen center. Navigate with ←→, expand with ↑↓, press Space to switch, or 1–9 to jump directly.")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
 
@@ -541,8 +541,14 @@ struct SettingsView: View {
 
     private func loadInstalledApps() {
         DispatchQueue.global(qos: .userInitiated).async {
-            let dirs = ["/Applications", NSHomeDirectory() + "/Applications"]
+            let dirs = [
+                "/Applications",
+                NSHomeDirectory() + "/Applications",
+                "/System/Applications",
+                "/System/Library/CoreServices"
+            ]
             var apps: [InstalledAppInfo] = []
+            var seenBundleIds = Set<String>()
             let fm = FileManager.default
 
             for dir in dirs {
@@ -551,9 +557,17 @@ struct SettingsView: View {
                     let path = (dir as NSString).appendingPathComponent(item)
                     guard let bundle = Bundle(path: path),
                           let bundleId = bundle.bundleIdentifier else { continue }
-                    let name = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
-                        ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
-                        ?? item.replacingOccurrences(of: ".app", with: "")
+                    if seenBundleIds.contains(bundleId) { continue }
+                    seenBundleIds.insert(bundleId)
+                    // Use URL.localizedName for system-language app names (e.g. "备忘录" instead of "Notes")
+                    let url = URL(fileURLWithPath: path)
+                    let localizedName = (try? url.resourceValues(forKeys: [.localizedNameKey]))?.localizedName
+                    let name: String
+                    if let ln = localizedName {
+                        name = ln.hasSuffix(".app") ? String(ln.dropLast(4)) : ln
+                    } else {
+                        name = item.replacingOccurrences(of: ".app", with: "")
+                    }
                     let icon = NSWorkspace.shared.icon(forFile: path)
                     icon.size = NSSize(width: 32, height: 32)
                     apps.append(InstalledAppInfo(bundleId: bundleId, name: name, path: path, icon: icon))
@@ -579,6 +593,8 @@ struct SettingsView: View {
             animationSpeedSection
             Divider().padding(.horizontal, 16)
             sortDirectionSection
+            Divider().padding(.horizontal, 16)
+            recentItemsSection
         }
     }
 
@@ -662,6 +678,23 @@ struct SettingsView: View {
             .font(.system(size: 12))
 
             Text("Controls the arrangement direction for apps and sub-windows in the circle.")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+    }
+
+    // MARK: - Recent Items Section
+
+    private var recentItemsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(icon: "clock.arrow.circlepath", title: "Recent Items")
+
+            Toggle("Show Recent Items Bar", isOn: $settings.showRecentItems)
+                .font(.system(size: 13))
+
+            Text("Display a horizontal bar of recently opened files and apps at the bottom of the Orby circle.")
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
         }

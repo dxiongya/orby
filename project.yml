@@ -14,8 +14,8 @@ settings:
     INFOPLIST_FILE: Info.plist
     CODE_SIGN_ENTITLEMENTS: Orby.entitlements
     LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
-    MARKETING_VERSION: "0.1.1"
-    CURRENT_PROJECT_VERSION: "7"
+    MARKETING_VERSION: "0.1.2"
+    CURRENT_PROJECT_VERSION: "8"
   configs:
     Release:
       SWIFT_OPTIMIZATION_LEVEL: "-O"
