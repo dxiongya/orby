@@ -82,6 +82,18 @@ Color-code your apps with tags for quick visual recognition.
 - Create custom tags via right-click or Settings
 - Tags persist across sessions
 
+### Dock Peek
+
+Hover over any app icon in the macOS Dock to see a floating preview panel showing all open windows for that app — inspired by [DockDoor](https://github.com/ejbills/DockDoor).
+
+- Window thumbnails with live capture, displayed in a compact card layout
+- Traffic light buttons (close / minimize / fullscreen) appear on hover
+- Click any thumbnail to activate that window
+- Minimized windows shown with a dimmed overlay
+- Apps with no open windows display a compact "No open windows" state
+- Works with bottom, left, and right Dock positions
+- Toggle on/off in **Settings > Dock Peek**
+
 ### Sub-Window Reorder
 
 Long-press a sub-window bubble and drag to rearrange the order. Your custom order persists until the app is relaunched.
@@ -97,7 +109,7 @@ A horizontal scroll bar at the bottom of the overlay shows your recently used ap
 - Hover to preview: live window capture for apps, QuickLook thumbnail for files
 - Apps running without visible windows show a placeholder with their icon
 - Click to open — intelligently handles apps with closed windows
-- Toggle on/off in **Settings > Display > Recent Items**
+- Toggle on/off in **Settings > Appearance > Recent Items**
 
 ### Close Mode
 
@@ -144,6 +156,7 @@ While Orby is open, hold the **Option** key to instantly display all window titl
 
 | Gesture | Action |
 |---------|--------|
+| **Hover dock icon** | Show Dock Peek window preview |
 | **Hover** | Expand app windows / Show preview |
 | **Click** | Switch to app or window |
 | **Right-click** | Context menu (tag / quick launch) |
@@ -191,7 +204,7 @@ Grant them in **System Settings > Privacy & Security**.
 
 Access via the menu bar icon > **Settings...** or **Cmd + ,**. Settings are organized into four tabs:
 
-### General
+### Shortcuts
 - **Hotkey Bindings** — Add, remove, or re-record hotkey combinations (keyboard or mouse + modifiers)
 - **Keyboard Mode** — Enable pure keyboard navigation with built-in usage guide
 - **Quick Launch** — View and remove Option + Number bindings
@@ -201,15 +214,17 @@ Access via the menu bar icon > **Settings...** or **Cmd + ,**. Settings are orga
 - **Layout Preview** — Visual circular preview of pinned apps; drag to reorder, hover to delete (Manual Edit mode)
 - **Add Apps** — Search installed applications and pin them to the circle (Manual Edit mode)
 - **Smart Suggestions** — Location toggle, usage data management, and cold-start guidance (Smart mode)
+- **Tag Presets** — Manage color-coded tag categories
 
-### Display
+### Appearance
 - **Window Preview** — Toggle on/off, adjust preview delay
 - **Animation Speed** — Separate sliders for main app and sub-window entrance animations (0.5x – 3.0x)
 - **Sort Direction** — Choose clockwise or counter-clockwise arrangement for apps and sub-windows
 - **Recent Items** — Show/hide the bottom recent items bar
 
-### Tags
-- **Tag Presets** — Manage color-coded tag categories
+### Dock Peek
+- **Enable/Disable** — Toggle the Dock Peek feature on or off
+- **Preview** — Visual mockup showing how Dock Peek looks
 
 ## System Requirements
 

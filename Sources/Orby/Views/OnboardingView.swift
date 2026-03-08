@@ -68,6 +68,13 @@ struct OnboardingView: View {
             keys: "← → Space 1-6",
             detail: "Enable in Settings for pure keyboard navigation.\nArrow keys cycle apps, Space activates,\n1-6 jump to neighbors. ESC to go back."
         ),
+        (
+            icon: "dock.rectangle",
+            title: "Dock Peek",
+            subtitle: "Preview windows from the Dock",
+            keys: nil,
+            detail: "Hover any app icon in the Dock to see\nits open windows as floating thumbnails.\nClick to activate, or use traffic light\nbuttons to close/minimize/fullscreen."
+        ),
     ]
 
     var body: some View {

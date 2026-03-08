@@ -68,6 +68,14 @@ final class AppDiscoveryService {
         return appItems
     }
 
+    /// Get windows for a specific PID (used by DockPeekService)
+    func getWindowsForApp(pid: pid_t) -> [WindowItem] {
+        let cgEntries = getCGWindowsByPid()[pid] ?? []
+        let app = NSRunningApplication(processIdentifier: pid)
+        let appName = app?.localizedName ?? ""
+        return discoverWindows(pid: pid, appName: appName, cgEntries: cgEntries)
+    }
+
     // MARK: - Window Discovery (AX primary, CG for cross-ref)
 
     private struct CGEntry {
@@ -405,6 +413,36 @@ final class AppDiscoveryService {
         }
     }
 
+    /// Reposition a window to the given screen coordinates.
+    /// `screenPoint` is in global (flipped) coordinates — top-left origin.
+    func repositionWindow(_ window: WindowItem, to screenPoint: CGPoint) {
+        guard let axWindow = findAXWindow(window) else { return }
+        var point = screenPoint
+        if let axValue = AXValueCreate(.cgPoint, &point) {
+            AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute as CFString, axValue)
+        }
+        // Bring to front
+        AXUIElementPerformAction(axWindow, kAXRaiseAction as CFString)
+        if let app = NSRunningApplication(processIdentifier: window.ownerPid) {
+            app.activate(options: [.activateIgnoringOtherApps])
+        }
+    }
+
+    func minimizeWindow(_ window: WindowItem) {
+        guard let axWindow = findAXWindow(window) else { return }
+        AXUIElementSetAttributeValue(axWindow, kAXMinimizedAttribute as CFString, true as CFTypeRef)
+    }
+
+    func toggleFullscreenWindow(_ window: WindowItem) {
+        guard let axWindow = findAXWindow(window) else { return }
+        // Use the fullscreen button (green traffic light) via AX
+        var fullscreenRef: CFTypeRef?
+        AXUIElementCopyAttributeValue(axWindow, "AXFullScreenButton" as CFString, &fullscreenRef)
+        if let fullscreenButton = fullscreenRef {
+            AXUIElementPerformAction(fullscreenButton as! AXUIElement, kAXPressAction as CFString)
+        }
+    }
+
     func closeWindow(_ window: WindowItem) {
         guard let axWindow = findAXWindow(window) else { return }
         var closeRef: CFTypeRef?
@@ -415,7 +453,7 @@ final class AppDiscoveryService {
         }
     }
 
-    private func findAXWindow(_ window: WindowItem) -> AXUIElement? {
+    func findAXWindow(_ window: WindowItem) -> AXUIElement? {
         let appElement = AXUIElementCreateApplication(window.ownerPid)
         var windowsRef: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowsRef)

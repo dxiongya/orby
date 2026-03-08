@@ -41,10 +41,10 @@ struct SettingsView: View {
         VStack(spacing: 0) {
             // Tab bar
             HStack(spacing: 0) {
-                tabButton("General", icon: "gearshape.fill", index: 0)
+                tabButton("Shortcuts", icon: "keyboard.fill", index: 0)
                 tabButton("Apps", icon: "square.grid.2x2.fill", index: 1)
-                tabButton("Display", icon: "paintbrush.fill", index: 2)
-                tabButton("Tags", icon: "tag.fill", index: 3)
+                tabButton("Appearance", icon: "paintbrush.fill", index: 2)
+                tabButton("Dock Peek", icon: "dock.rectangle", index: 3)
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
@@ -56,10 +56,10 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     switch selectedTab {
-                    case 0: generalTab
+                    case 0: shortcutsTab
                     case 1: appsTab
-                    case 2: displayTab
-                    case 3: tagsTab
+                    case 2: appearanceTab
+                    case 3: dockPeekTab
                     default: EmptyView()
                     }
                     Spacer(minLength: 16)
@@ -96,10 +96,10 @@ struct SettingsView: View {
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MARK: - General Tab
+    // MARK: - Shortcuts Tab
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    private var generalTab: some View {
+    private var shortcutsTab: some View {
         VStack(alignment: .leading, spacing: 0) {
             hotkeySection
             Divider().padding(.horizontal, 16)
@@ -316,6 +316,10 @@ struct SettingsView: View {
             case .smartSuggestions:
                 smartSuggestionsSection
             }
+
+            Divider().padding(.horizontal, 16)
+
+            tagPresetsSection
         }
     }
 
@@ -583,10 +587,10 @@ struct SettingsView: View {
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MARK: - Display Tab
+    // MARK: - Appearance Tab
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    private var displayTab: some View {
+    private var appearanceTab: some View {
         VStack(alignment: .leading, spacing: 0) {
             previewSection
             Divider().padding(.horizontal, 16)
@@ -596,6 +600,157 @@ struct SettingsView: View {
             Divider().padding(.horizontal, 16)
             recentItemsSection
         }
+    }
+
+    // MARK: - Dock Peek Section
+
+    private var dockPeekSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(icon: "macwindow.on.rectangle", title: "Dock Window Preview")
+
+            Toggle("Enable Dock Peek", isOn: $settings.dockPeekEnabled)
+                .font(.system(size: 13))
+
+            VStack(alignment: .leading, spacing: 8) {
+                infoRow(icon: "hand.point.up.left.fill", color: .blue,
+                        text: "Hover over Dock icons to preview app windows")
+                infoRow(icon: "macwindow", color: .purple,
+                        text: "Click a thumbnail to activate that window")
+                infoRow(icon: "xmark.circle.fill", color: .red,
+                        text: "Traffic light buttons to close / minimize / fullscreen")
+            }
+            .padding(12)
+            .background(cardBackground)
+
+            // Visual preview mockup
+            dockPeekPreviewMockup
+                .padding(.top, 2)
+
+            Text("Hover over Dock app icons to see floating window previews. Click to activate, use traffic light buttons to manage windows.")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+    }
+
+    /// Mini visual mockup showing what Dock Peek looks like
+    private var dockPeekPreviewMockup: some View {
+        VStack(spacing: 0) {
+            // Preview panel mockup
+            VStack(spacing: 4) {
+                // Header
+                HStack(spacing: 4) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.blue.opacity(0.6))
+                        .frame(width: 10, height: 10)
+                    Text("Safari")
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                    Spacer()
+                    Text("2")
+                        .font(.system(size: 7, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.35))
+                        .padding(.horizontal, 3)
+                        .background(Capsule().fill(Color.white.opacity(0.08)))
+                }
+                .padding(.horizontal, 6)
+                .padding(.top, 5)
+
+                // Thumbnails
+                HStack(spacing: 4) {
+                    dockPeekMockupThumb(title: "Google", highlight: true)
+                    dockPeekMockupThumb(title: "GitHub", highlight: false)
+                }
+                .padding(.horizontal, 5)
+                .padding(.bottom, 5)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(nsColor: .darkGray).opacity(0.85))
+                    .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+            )
+            .frame(width: 200)
+
+            // Arrow pointing down
+            Triangle()
+                .fill(Color(nsColor: .darkGray).opacity(0.85))
+                .frame(width: 12, height: 6)
+
+            // Dock bar mockup
+            HStack(spacing: 6) {
+                ForEach(0..<5) { i in
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(i == 2
+                              ? Color.blue.opacity(0.5)
+                              : Color.white.opacity(0.12))
+                        .frame(width: 22, height: 22)
+                        .overlay(
+                            i == 2
+                                ? RoundedRectangle(cornerRadius: 4)
+                                    .strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5)
+                                : nil
+                        )
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(nsColor: .darkGray).opacity(0.5))
+            )
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.black.opacity(0.2))
+        )
+    }
+
+    private func dockPeekMockupThumb(title: String, highlight: Bool) -> some View {
+        VStack(spacing: 2) {
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Color.white.opacity(0.08))
+                    .frame(width: 86, height: 50)
+                // Fake content lines
+                VStack(alignment: .leading, spacing: 3) {
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(Color.white.opacity(0.12))
+                        .frame(width: 60, height: 3)
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(Color.white.opacity(0.08))
+                        .frame(width: 45, height: 3)
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(Color.white.opacity(0.06))
+                        .frame(width: 55, height: 3)
+                }
+                .padding(6)
+
+                // Traffic lights
+                if highlight {
+                    HStack(spacing: 2) {
+                        Circle().fill(Color.red.opacity(0.8)).frame(width: 5, height: 5)
+                        Circle().fill(Color.yellow.opacity(0.8)).frame(width: 5, height: 5)
+                        Circle().fill(Color.green.opacity(0.8)).frame(width: 5, height: 5)
+                    }
+                    .padding(3)
+                }
+            }
+            Text(title)
+                .font(.system(size: 6))
+                .foregroundColor(.white.opacity(0.4))
+        }
+        .padding(3)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color.white.opacity(highlight ? 0.06 : 0))
+        )
     }
 
     // MARK: - Preview Section
@@ -703,12 +858,12 @@ struct SettingsView: View {
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // MARK: - Tags Tab
+    // MARK: - Dock Peek Tab
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    private var tagsTab: some View {
+    private var dockPeekTab: some View {
         VStack(alignment: .leading, spacing: 0) {
-            tagPresetsSection
+            dockPeekSection
         }
     }
 
@@ -1130,5 +1285,18 @@ private struct PreviewBubbleContent: View {
         .scaleEffect(isDragging ? 1.15 : (isHovered ? 1.08 : 1.0))
         .animation(.spring(response: 0.2, dampingFraction: 0.6), value: isDragging)
         .animation(.spring(response: 0.2, dampingFraction: 0.6), value: isHovered)
+    }
+}
+
+// MARK: - Triangle Shape (used by Dock Peek mockup)
+
+private struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: rect.midX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        p.closeSubpath()
+        return p
     }
 }

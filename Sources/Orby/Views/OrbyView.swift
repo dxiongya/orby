@@ -1205,6 +1205,7 @@ struct OrbyView: View {
         }
     }
 
+
     // MARK: - Preview Dismiss Timer
 
     /// Schedule delayed preview dismissal (gives mouse time to reach the preview card)
@@ -1359,6 +1360,7 @@ struct OrbyView: View {
                 let winId = apps[idx].windows[sub].id
                 cancelPreviewDismiss()
                 withAnimation(quickSpring) { hoveredSubAppIndex = sub; hoveredAppIndex = idx }
+
                 if winId != previewForWindowId {
                     clearPreviewNow()
                     schedulePreview(for: idx, windowIndex: sub, windowId: winId)
@@ -1607,8 +1609,8 @@ struct OrbyView: View {
     }
 
     private func isMouseOverPreview(_ loc: CGPoint) -> Bool {
-        guard previewImage != nil else { return false }
-        return previewFrame.insetBy(dx: -8, dy: -8).contains(loc)
+        if previewImage != nil && previewFrame.insetBy(dx: -8, dy: -8).contains(loc) { return true }
+        return false
     }
 
     private func clearPreviewNow() {

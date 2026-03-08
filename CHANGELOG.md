@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.1.3
+
+### 新增 / New
+
+- **Dock 预览 (Dock Peek)** — 悬停 macOS Dock 图标即可弹出浮动窗口预览面板，灵感来自 DockDoor
+  Dock Peek — Hover any Dock icon to see a floating preview panel with window thumbnails, inspired by DockDoor
+- **窗口缩略图** — 实时捕获并展示每个窗口的缩略图，已最小化窗口显示遮罩标识
+  Live window thumbnails with minimized window overlay indicator
+- **红绿灯按钮** — 悬停缩略图时显示关闭/最小化/全屏按钮，操作后预览自动刷新
+  Traffic light buttons (close/minimize/fullscreen) on thumbnail hover with auto-refresh
+- **点击激活** — 点击缩略图即可激活窗口并自动关闭预览
+  Click thumbnail to activate window and dismiss preview
+- **Dock 位置适配** — 支持底部、左侧和右侧 Dock 布局
+  Supports bottom, left, and right Dock positions
+
+### 改进 / Improvements
+
+- **设置面板重构** — 标签页重新组织：通用→快捷键、显示→外观、标签合并入应用、新增 Dock 预览标签页
+  Settings tabs reorganized: General→Shortcuts, Display→Appearance, Tags merged into Apps, new Dock Peek tab
+- **无窗口状态** — Dock 预览中无打开窗口的应用显示紧凑的空状态提示
+  Compact empty state for apps with no open windows in Dock Peek
+
+### 修正 / Fixes
+
+- **预览消失逻辑** — 修复鼠标离开 Dock 区域后预览面板不消失的问题
+  Fixed preview panel not dismissing when mouse leaves dock area
+- **瞬间消失修复** — 增加 Grace Period 避免预览刚出现就消失
+  Added grace period to prevent premature dismiss after panel shows
+- **图标切换闪烁** — 修复在 Dock 图标之间快速移动时的异常闪烁
+  Fixed flickering when moving quickly between dock icons
+- **面板尺寸** — 使用 SwiftUI fittingSize 消除预览面板右侧多余空白
+  Eliminated excess right-side spacing using SwiftUI fittingSize
+
+---
+
 ## v0.1.2
 
 ### 新增 / New

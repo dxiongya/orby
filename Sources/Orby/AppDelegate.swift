@@ -74,6 +74,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         closePermissionGuide()
         startPermissionMonitor()
 
+        // Start Dock Peek (DockDoor-style hover previews)
+        if SettingsManager.shared.dockPeekEnabled {
+            DockPeekService.shared.start()
+        }
+
         if !UserDefaults.standard.bool(forKey: "onboardingCompleted") {
             showOnboarding()
         }
@@ -380,6 +385,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         permissionMonitorTimer?.invalidate()
         hotKeyManager.stop()
         QuickLaunchManager.shared.stopMonitoring()
+        DockPeekService.shared.stop()
         NSApp.terminate(nil)
     }
 

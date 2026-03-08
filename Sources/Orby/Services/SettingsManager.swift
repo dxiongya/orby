@@ -100,6 +100,16 @@ final class SettingsManager: ObservableObject {
     @Published var showRecentItems: Bool = true {
         didSet { UserDefaults.standard.set(showRecentItems, forKey: "showRecentItems") }
     }
+    @Published var dockPeekEnabled: Bool = true {
+        didSet {
+            UserDefaults.standard.set(dockPeekEnabled, forKey: "dockPeekEnabled")
+            if dockPeekEnabled {
+                DockPeekService.shared.start()
+            } else {
+                DockPeekService.shared.stop()
+            }
+        }
+    }
 
     private init() {
         showPreview = UserDefaults.standard.object(forKey: "showPreview") as? Bool ?? true
@@ -113,6 +123,7 @@ final class SettingsManager: ObservableObject {
         mainAppSpeed = UserDefaults.standard.object(forKey: "mainAppSpeed") as? Double ?? 1.6
         subAppSpeed = UserDefaults.standard.object(forKey: "subAppSpeed") as? Double ?? 1.6
         showRecentItems = UserDefaults.standard.object(forKey: "showRecentItems") as? Bool ?? true
+        dockPeekEnabled = UserDefaults.standard.object(forKey: "dockPeekEnabled") as? Bool ?? true
         loadHotKeys()
     }
 
