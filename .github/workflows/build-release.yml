@@ -124,15 +124,22 @@ jobs:
           # Delete existing tag if any
           gh api repos/dxiongya/orby/git/refs/tags/"$VERSION" -X DELETE 2>/dev/null || true
 
+          # Extract changelog for this version (between first two ## headers)
+          CHANGELOG=$(awk '/^## v/{if(found) exit; found=1; next} found' CHANGELOG.md)
+
           gh release create "$VERSION" \
             --repo dxiongya/orby \
-            --title "Orby Pro $VERSION" \
+            --title "Orby $VERSION" \
             --notes-file - \
             Orby-Pro-macOS.dmg \
-            Orby-Pro-macOS.zip <<'NOTES'
+            Orby-Pro-macOS.zip <<NOTES
+          ${CHANGELOG}
+
+          ---
+
           ## Installation
 
-          1. Download `Orby-Pro-macOS.dmg` or `Orby-Pro-macOS.zip`
+          1. Download \`Orby-Pro-macOS.dmg\` or \`Orby-Pro-macOS.zip\`
           2. Open the DMG and drag **Orby.app** to Applications, or unzip and move to Applications
           3. Launch Orby — grant Accessibility and Screen Recording permissions when prompted
 
